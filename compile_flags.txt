@@ -1,0 +1,7 @@
+-D_DEFAULT_SOURCE
+-D_XOPEN_SOURCE=600
+-I/home/yuujirou07/vscode_proj/mytop/src/mytop_theme
+-I/home/yuujirou07/vscode_proj/mytop/src/mytop_render
+-I/home/yuujirou07/vscode_proj/mytop/src/mytio_window
+-I/home/yuujirou07/vscode_proj/mytop/src
+-I/home/yuujirou07/vscode_proj/mytop/src/process_info/cpu
