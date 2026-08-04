@@ -31,6 +31,7 @@ case "$(uname -s)" in
                 src/mytio_window/window.c \
                 src/process_info/process_info.c \
                 src/process_info/cpu/cpu_info.c \
+                src/process_info/memory/memory.c \
                 -o mytop \
                 -Isrc/ \
                 -Isrc/mytop_theme/ \
@@ -38,6 +39,7 @@ case "$(uname -s)" in
                 -Isrc/process_info/cpu \
                 -Isrc/mytio_window/ \
                 -Isrc/process_info/ \
+                -Isrc/process_info/memory \
                 $NCURSES_CFLAGS $NCURSES_LIBS
         echo "ビルド完了: mytop"
         ;;

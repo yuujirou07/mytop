@@ -27,6 +27,15 @@ struct device_info_result get_device_info(enum device dev){
                         get_cpu_info(&dev_result,cpu_path);
                         return dev_result;
                 }
+                case memory:{
+                        char mem_path[512] = {0};
+                        int joint_result = snprintf(mem_path,512,
+                                "%s%s",
+                                home_dir_path,device_info_dir_names[memory]);
+                        mem_path[joint_result] = '\0';
+                        get_memory_info(&dev_result,mem_path);
+                        return dev_result;
+                }
                 default:
                         return dev_result;
         }

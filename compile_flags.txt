@@ -5,3 +5,4 @@
 -I/home/yuujirou07/vscode_proj/mytop/src/mytio_window
 -I/home/yuujirou07/vscode_proj/mytop/src
 -I/home/yuujirou07/vscode_proj/mytop/src/process_info/cpu
+-I/home/yuujirou07/vscode_proj/mytop/src/process_info/memory

@@ -22,7 +22,8 @@ void get_cpu_info(struct device_info_result *dev_result,const char *path){
 
         int cpu_info_member_count = 0;
         while(fgets(file_line_buff,sizeof(file_line_buff),file) != NULL){
-                if(file_line_buff[0] == '\n' || file_line_buff[0] == '\r' || cpu_info_member_count > cpu_info_member_size)break;
+                if(file_line_buff[0] == '\n' || file_line_buff[0] == '\r' || 
+                        cpu_info_member_count > cpu_info_member_size)break;
 
                 char *value = strchr(file_line_buff,':');
                 if(value == NULL)continue;

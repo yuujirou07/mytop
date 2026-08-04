@@ -8,6 +8,7 @@
 #include"core.h"
 #include"window.h"
 #include "cpu_info.h"
+#include "memory.h"
 #include"mytop_render.h"
 #include "process_info/process_info.h"
 #include "theme.h"
@@ -78,6 +79,15 @@ struct window_data *create_window(struct window_data **parent_win){
                 free(tmp_win_data);
                 return NULL;
         }
+
+        //calloc()のままだと枠線の背景色が0(COLOR_BLACK)になり、
+        //背景を透過させている端末では枠のところだけ黒く浮いてしまう
+        //背景は端末の既定色、文字色は白を初期値にしておく
+        struct color_pair default_line_color = {COLOR_DEFAULT,COLOR_WHITE};
+        tmp_win_data->outline.line_color.top = default_line_color;
+        tmp_win_data->outline.line_color.bottom = default_line_color;
+        tmp_win_data->outline.line_color.left = default_line_color;
+        tmp_win_data->outline.line_color.right = default_line_color;
 
         if(parent_win != NULL)tmp_win_data->parent_window_data = *parent_win;
         else tmp_win_data->parent_window_data = NULL;
@@ -388,6 +398,12 @@ void set_device_data(struct window_data *win_data,enum device dev){
                         set_cpu_cores_info(win_data,atoi(cpu_info.cpu_cores));
                         break;
                 }
+                case memory:{
+                        struct mem_info mem_info = device_result.device_data.mem_info;
+                        FILE *p = fopen("d.txt","r");
+                        fputs(mem_info.mem_total,p);
+                        fclose(p);
+                }
                 
                 default:
                         break;
@@ -417,7 +433,7 @@ void set_cpu_cores_info(struct window_data *win_data,int cores_num){
                         set_chr(win_data,
                                 buff,
                                 str_pos,
-                                (struct color_pair){COLOR_BLACK,COLOR_WHITE},
+                                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
                                 A_NORMAL);
                                 core_pos_y++;
                 }
@@ -426,7 +442,7 @@ void set_cpu_cores_info(struct window_data *win_data,int cores_num){
                         set_chr(win_data,
                                 buff,
                                 str_pos,
-                                (struct color_pair){COLOR_BLACK,COLOR_WHITE},
+                                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
                                 A_NORMAL);
                 }
                 str_pos.x += str_size  + 1;
@@ -469,7 +485,7 @@ void set_cpu_core_glaph(struct window_data *win_data,int core_id,struct vec2 gla
         for(int i = 0;i < glaph_len;i++)glaph_str[i] = glaph_base_line;
         glaph_str[glaph_len] = L'\0';
         set_chr(win_data,glaph_str,glaph_start_pos,
-                (struct color_pair){COLOR_BLACK,COLOR_WHITE},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
                 A_NORMAL);
 
         int palms_num_start_pos_x = 
@@ -479,7 +495,7 @@ void set_cpu_core_glaph(struct window_data *win_data,int core_id,struct vec2 gla
         struct vec2 palms_num_start_pos = {palms_num_start_pos_x,glaph_start_pos.y};
         set_chr(win_data,palams_num,
                 palms_num_start_pos,
-                (struct color_pair){COLOR_BLACK,COLOR_WHITE},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
                 A_NORMAL);
 
         if(core_use_data.core_palm_data == NULL || core_use_data.core_palm_size <= 0)return;
@@ -516,7 +532,7 @@ void set_cpu_core_glaph(struct window_data *win_data,int core_id,struct vec2 gla
                 struct vec2 cell_pos = {glaph_start_pos.x + glaph_id,
                         glaph_start_pos.y};
                 set_chr(win_data,glaph_cell,cell_pos,
-                        (struct color_pair){COLOR_BLACK,glaph_color},A_NORMAL);
+                        (struct color_pair){COLOR_DEFAULT,glaph_color},A_NORMAL);
                 glaph_id++;
         }
 }
@@ -537,7 +553,7 @@ void set_cpu_total_use_glaph(struct window_data *win_data,int percent){
         size_t top_msg_len = wcslen(top_msg);
         set_chr(win_data,top_msg,
                 top_msg_st_pos,
-                (struct color_pair){COLOR_BLACK,COLOR_WHITE},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
                 A_BOLD);
 
         struct vec2 total_cpu_use_glaph_area_start_pos;
@@ -551,12 +567,15 @@ void set_cpu_total_use_glaph(struct window_data *win_data,int percent){
         glaph_str[now_uage] = L'\0';
 
         set_chr(win_data,glaph_str,total_cpu_use_glaph_area_start_pos,
-                (struct color_pair){COLOR_BLACK,COLOR_WHITE},A_BOLD);
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
 }
 
 struct color_pair get_window_msg_color_pair(struct window_data *win_data,int msg_num){
-        if(win_data == NULL)return (struct color_pair){0,0};
-        struct color_pair tmp_col_pair = {0,0};
+        //取り出せなかったときは端末の既定色を返す
+        //ここで0(COLOR_BLACK)を返すと透過端末で背景が黒く塗られる
+        struct color_pair default_col_pair = {COLOR_DEFAULT,COLOR_DEFAULT};
+        if(win_data == NULL)return default_col_pair;
+        struct color_pair tmp_col_pair = default_col_pair;
         if(win_data->chr_data.chr_data[msg_num] == NULL)return tmp_col_pair;
         tmp_col_pair = win_data->chr_data.chr_data[msg_num]->chr_color;
         return tmp_col_pair;

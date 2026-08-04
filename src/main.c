@@ -55,9 +55,10 @@ int main(int argc,char **argv){
         get_window_pos(cpu_data_win,&parent_pos);
         set_window_pos(cpu_data_win,parent_size.x - size_w,0);  
         set_device_data(cpu_data_win,cpu);
-        
-
-        set_background(COLOR_BLACK);
+        set_device_data(cpu_info_win,memory);
+        //端末の背景をそのまま使う
+        //COLOR_BLACKを指定すると、背景を透過させている端末で黒く塗り潰される
+        set_background(COLOR_DEFAULT);
         render_window(cpu_info_win);
         render_window(cpu_data_win);
         window_push_screen();

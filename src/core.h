@@ -6,6 +6,14 @@
 #include<ncurses.h>
 #include"theme.h"
 
+//端末が元から使っている色(既定色)を指す値
+//use_default_colors()を呼んだncursesでは-1がこの意味になる
+//背景にCOLOR_BLACKではなくこちらを渡すと、背景を透過させている端末で
+//黒く塗り潰されず、下の壁紙などがそのまま透けて見える
+#ifndef COLOR_DEFAULT
+#define COLOR_DEFAULT (-1)
+#endif
+
 
 struct window_data;
 struct outline;

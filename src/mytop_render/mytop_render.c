@@ -12,13 +12,19 @@
 
 static int color_pair_dic(int *pair_id,int color[2],int flags);
 static int outline_color_pair(struct color_pair color);
+static int color_pair_id(int bg_color,int fg_color);
 //描画まわりの入口
 //ncursesを立ち上げ、色が使える端末ならカラーペアも先に全部登録しておく
 //create_window()はstdscrを必要とするので、必ずこれより後に呼ぶ
 int init_render(){
         init_ncurses();
-        if(has_colors())set_color();
-
+        if(has_colors()){
+                set_color();
+                //stdscrの背景を端末の既定色にしておく
+                //ここより後にderwin()で作る子ウィンドウはこの背景を引き継ぐので、
+                //背景が透過している端末でも黒で塗り潰されない
+                set_background(COLOR_DEFAULT);
+        }
 
 
       return 0;
@@ -70,17 +76,26 @@ WINDOW *win_ctrl(WINDOW *win,int flags){
         return NULL;
 }
 
-//背景色8種×文字色8種の組み合わせ64通りを、あらかじめ全部
+//色の指定(bg,fg)からカラーペアのidを決める
+//COLOR_DEFAULT(-1)も色の1つとして扱うため+1して0起点へ寄せる
+//ペア0はncursesが「既定色の組み合わせ」として予約していて
+//init_pair()で書き換えられないので、さらに+1して1から使う
+int color_pair_id(int bg_color,int fg_color){
+        return (bg_color + 1) * 9 + (fg_color + 1) + 1;
+}
+
+//背景色9種×文字色9種の組み合わせ81通りを、あらかじめ全部
 //カラーペアとして登録しておく
-//idはbg*8+fgで決め打ちなので、後から(bg,fg)で引ける
+//9種なのは通常の8色にCOLOR_DEFAULT(端末の既定色)を足したぶん
+//idはcolor_pair_id()で決め打ちなので、後から(bg,fg)で引ける
 void set_color(){
         start_color(); // 色の準備
+        //これを呼ぶと-1を「端末が元から使っている色」として指定できるようになる
         use_default_colors();
-        init_pair(100,COLOR_BLACK,-1);
-        for(int bg = 0;bg < 8;bg++){
-                for(int  fg= 0;fg < 8;fg++){
+        for(int bg = COLOR_DEFAULT;bg < 8;bg++){
+                for(int  fg= COLOR_DEFAULT;fg < 8;fg++){
                         int color[2] ={bg,fg};
-                        int color_pair_idx = bg *8 + fg;
+                        int color_pair_idx = color_pair_id(bg,fg);
                         color_pair_dic(&color_pair_idx,color,
                                 col_pair_dic_set);
                 }
@@ -96,10 +111,11 @@ int color_pair_dic(int *pair_id,int color[2],int flags){
         if(pair_id == NULL)return -1;
 
         //引数の値制限
-        if(color[0] < 0)color[0] = 0;
+        //下限はCOLOR_DEFAULT(-1)、つまり端末の既定色まで許す
+        if(color[0] < COLOR_DEFAULT)color[0] = COLOR_DEFAULT;
         else if(color[0] > 7)color[0] = 7;
 
-        if(color[1] < 0)color[1] = 0;
+        if(color[1] < COLOR_DEFAULT)color[1] = COLOR_DEFAULT;
         else if(color[1] > 7)color[1] = 7;
 
         static struct id_color_dic color_pair_dic[color_pair_max] = {0};
@@ -155,10 +171,11 @@ int outline_color_pair(struct color_pair color){
 
 //画面全体(stdscr)の背景色をbkgd()で塗り替える
 //以降そこへ書かれる文字はこのカラーペアを引き継ぐ
+//bg_colorにCOLOR_DEFAULTを渡すと端末の背景をそのまま使う(透過が保たれる)
 void set_background(int bg_color){
         if(!has_colors())return;
-        //文字色は関係ないので適当
-        int color[2] = {bg_color,COLOR_BLACK};
+        //文字色は指定しないので端末の既定色に任せる
+        int color[2] = {bg_color,COLOR_DEFAULT};
         int id = 0;
         if(color_pair_dic(&id,color,col_pair_dic_get) != 0)return;
         bkgd(COLOR_PAIR(id));
