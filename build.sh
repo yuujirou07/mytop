@@ -25,6 +25,8 @@ case "$(uname -s)" in
 
         # shellcheck disable=SC2086
         "$CC" $CFLAGS \
+                -g \
+                -fsanitize=address -fno-omit-frame-pointer \
                 src/main.c \
                 src/mytop_theme/theme.c \
                 src/mytop_render/mytop_render.c \

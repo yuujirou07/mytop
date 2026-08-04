@@ -9,7 +9,10 @@
 #define windowlist_remove 1
 
 #define winlist_max 64
-
+struct line_result{
+        struct line *line_data;
+        int line_num;
+};
 
 //指定した辺の上へ文字列を乗せる(未実装)
 int set_msg_on_line(struct window_data *win_data,enum line_side line_side,struct chr_data chr_data);
@@ -81,9 +84,20 @@ void set_chr(struct window_data *win_data,
 struct chr_data_arry get_window_msg_data(struct window_data *win_data);
 void get_vec2_maxyx(WINDOW *win,struct vec2 *pos);
 bool update_window_size(struct window_data *wind_data);
+//引数のウィンドウ内で、直接の子ウィンドウと重ならない最大矩形を返す
+//NULLならstdscr内のトップレベルウィンドウがない領域を調べる
+//返す位置は対象ウィンドウから見た相対座標
+//空きがない、または取得に失敗した場合はsizeが0のboxを返す
+struct box get_window_empty_space(struct window_data *win_data);
 void set_device_data(struct window_data *win_data,enum device dev);
 void set_cpu_core_glaph(struct window_data *win_data,int core_id,
         struct vec2 glaph_start_pos);
 void set_cpu_total_use_glaph(struct window_data *win_data,int num_percet);
 struct color_pair get_window_msg_color_pair(struct window_data *win_data,int msg_num);
+void set_memory_total(struct window_data *win_data,float memory_total);
+void set_memory_used_state(struct window_data *win_data,float used_data);
+void line_memory_allocate(struct window_data *win_data);
+int set_line(struct window_data *win_data,struct color_pair color_pair,int line);
+struct line_result get_line_data(struct window_data *win_data);
+int free_window(struct window_data **win_data);
 #endif

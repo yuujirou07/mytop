@@ -88,10 +88,16 @@ struct box{
         struct vec2 pos;
         struct vec2 size;
 };
+
+struct line{
+        int line;
+        struct color_pair color;
+};
 //テーマを差し替える
 //保持するだけで再描画はしないので、変更後は描画側を呼び直す必要がある
 void theme_set(enum theme theme_rq);
 //現在のテーマを返す(初期値はdark)
 enum theme theme_get();
+void get_window_list(struct window_data ***win_list,int *win_num);
 
 #endif

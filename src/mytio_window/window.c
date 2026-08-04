@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stddef.h>
 #include<stdio.h>
 #include<stdlib.h>
@@ -24,8 +25,12 @@ struct window_data{
         WINDOW *win;
         struct chr_data_arry chr_data;
         struct outline outline;
+        struct line *line;
         struct window_data *parent_window_data;
 };
+
+static struct window_data *winlist[winlist_max] = {0};
+static int windowlist_count = 0;
 
 //丸めた結果のboxをWINDOWへ反映する
 //必ず移動→リサイズの順に呼ぶ
@@ -70,6 +75,7 @@ struct window_data *create_window(struct window_data **parent_win){
         }
         tmp_win_data->chr_data.chr_data_count = 0;
         tmp_win_data->chr_data.allocate_num = 8;
+        tmp_win_data->line = NULL;
 
         //実際の位置とサイズはset_window_pos()/set_window_size()で決めるので
         //ここでは最小サイズのWINDOWを作っておく
@@ -79,7 +85,7 @@ struct window_data *create_window(struct window_data **parent_win){
                 free(tmp_win_data);
                 return NULL;
         }
-
+        
         //calloc()のままだと枠線の背景色が0(COLOR_BLACK)になり、
         //背景を透過させている端末では枠のところだけ黒く浮いてしまう
         //背景は端末の既定色、文字色は白を初期値にしておく
@@ -91,7 +97,7 @@ struct window_data *create_window(struct window_data **parent_win){
 
         if(parent_win != NULL)tmp_win_data->parent_window_data = *parent_win;
         else tmp_win_data->parent_window_data = NULL;
-
+        window_list_ctrl(&tmp_win_data,windowlist_add);
         return tmp_win_data;
 }
 
@@ -175,8 +181,6 @@ int set_window_outline_color(struct window_data *win_data,int color,enum line_si
 //removeでは削除位置より後ろをmemmove()で前へ詰めて穴を埋める
 int window_list_ctrl(struct window_data **win_data,int flags){
         if(win_data == NULL || *win_data == NULL)return -1;
-        static struct window_data *winlist[winlist_max] = {0};
-        static int windowlist_count = 0;
 
         switch(flags){
                 case windowlist_add:
@@ -242,7 +246,7 @@ int get_window_outline_size(struct window_data *win_data,enum line_side outline_
 //window_dataは不透明な型なので、中のWINDOWを取り出す口だけ用意する
 //描画側(mytop_render)がwaddch等を呼ぶために使う
 WINDOW *get_window_handle(struct window_data *win_data){
-        if(win_data == NULL)return NULL;
+        if(win_data == NULL)return stdscr;
         return win_data->win;
 }
 
@@ -400,17 +404,16 @@ void set_device_data(struct window_data *win_data,enum device dev){
                 }
                 case memory:{
                         struct mem_info mem_info = device_result.device_data.mem_info;
-                        FILE *p = fopen("d.txt","r");
-                        fputs(mem_info.mem_total,p);
-                        fclose(p);
+                        float mem_total= atof(mem_info.mem_total)/pow(10,6);
+                        set_memory_total(win_data,mem_total);
+                        set_memory_used_state(win_data,10);
+                        
                 }
                 
                 default:
                         break;
         }
-
-
-
+        free(parts_table.found_dev_table);
 }
 
 
@@ -562,7 +565,7 @@ void set_cpu_total_use_glaph(struct window_data *win_data,int percent){
 
         int glaph_str_max_size = win_size.x - total_cpu_use_glaph_area_start_pos.x ;
         int now_uage = glaph_str_max_size * percent/100;
-        wchar_t glaph_str[now_uage];
+        wchar_t glaph_str[now_uage+1];
         for(int i = 0;i < now_uage;i++)glaph_str[i] = get_font(cpu_bar_graph);
         glaph_str[now_uage] = L'\0';
 
@@ -584,4 +587,219 @@ struct color_pair get_window_msg_color_pair(struct window_data *win_data,int msg
 
 int check_cpu_usage_glaph_area(struct window_data *win_data){
         return 0;
+}
+
+
+bool check_box_overlay(struct window_data *win1,struct window_data *win2){
+        if(win1 == NULL || win2 == NULL){
+                return 0;
+        }
+
+        if( get_parent_win(win1) != get_parent_win(win2))return 0;
+        if(win1 == win2)return true;        
+
+        struct box win1_box;
+        struct box win2_box;
+        win1_box = get_window_box(win1);
+        win2_box = get_window_box(win2);
+
+        int win1_right = win1_box.pos.x + win1_box.size.x;
+        int win1_bottom = win1_box.pos.y + win1_box.size.y;
+
+        int win2_right = win2_box.pos.x + win2_box.size.x;
+        int win2_bottom = win2_box.pos.y + win2_box.size.y;
+
+        bool x_overlap = win1_box.pos.x < win2_right &&
+                win2_box.pos.x < win1_right;
+        bool y_overlap = win1_box.pos.y < win2_bottom &&
+                win2_box.pos.y < win1_bottom;
+
+        return x_overlap && y_overlap;
+}
+
+struct box get_window_empty_space(struct window_data *win_data){
+        struct box empty_space = {{0,0},{0,0}};
+        WINDOW *win = get_window_handle(win_data);
+        if(win == NULL)return empty_space;
+
+        int height = 0;
+        int width = 0;
+        getmaxyx(win,height,width);
+        if(width < 1 || height < 1)return empty_space;
+
+        unsigned char *occupied = calloc((size_t)height,(size_t)width);
+        int *heights = calloc((size_t)width,sizeof(int));
+        int *stack = malloc(sizeof(int) * (size_t)width);
+        if(occupied == NULL || heights == NULL || stack == NULL){
+                free(occupied);
+                free(heights);
+                free(stack);
+                return empty_space;
+        }
+
+        for(int i = 0;i < windowlist_count;i++){
+                struct window_data *child = winlist[i];
+                if(child == NULL || child->parent_window_data != win_data)continue;
+
+                struct box child_box = get_window_box(child);
+                int left = child_box.pos.x;
+                int top = child_box.pos.y;
+                int right = left + child_box.size.x;
+                int bottom = top + child_box.size.y;
+
+                if(left < 0)left = 0;
+                if(top < 0)top = 0;
+                if(right > width)right = width;
+                if(bottom > height)bottom = height;
+                if(left >= right || top >= bottom)continue;
+
+                for(int y = top;y < bottom;y++){
+                        memset(&occupied[(size_t)y * (size_t)width + (size_t)left],
+                                1,(size_t)(right - left));
+                }
+        }
+
+        //各行を底辺とする空き高さから、最大面積の矩形を取り出す
+        size_t max_area = 0;
+        for(int y = 0;y < height;y++){
+                for(int x = 0;x < width;x++){
+                        if(occupied[(size_t)y * (size_t)width + (size_t)x]){
+                                heights[x] = 0;
+                        }
+                        else{
+                                heights[x]++;
+                        }
+                }
+
+                int stack_top = -1;
+                for(int x = 0;x <= width;x++){
+                        int current_height = x < width ? heights[x] : 0;
+                        while(stack_top >= 0 && heights[stack[stack_top]] > current_height){
+                                int rect_height = heights[stack[stack_top--]];
+                                int left = stack_top >= 0 ? stack[stack_top] + 1 : 0;
+                                int rect_width = x - left;
+                                size_t area = (size_t)rect_width * (size_t)rect_height;
+                                if(area > max_area){
+                                        max_area = area;
+                                        empty_space.pos.x = left;
+                                        empty_space.pos.y = y - rect_height + 1;
+                                        empty_space.size.x = rect_width;
+                                        empty_space.size.y = rect_height;
+                                }
+                        }
+                        if(x < width)stack[++stack_top] = x;
+                }
+        }
+
+        free(occupied);
+        free(heights);
+        free(stack);
+        return empty_space;
+}
+
+void set_memory_total(struct window_data *win_data,float memory_total){
+        if(win_data == NULL)return;
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+        wchar_t total[16];
+
+        int joint_result = 
+                swprintf(total,16,L"TOTAL: %.1f GiB",memory_total);
+        
+        if(joint_result > win_size.x)return;
+        int mem_total_str_st_pos = (win_size.x - joint_result)/2;
+        struct vec2 mem_total_st_pos ={mem_total_str_st_pos,1};
+
+        set_chr(win_data,
+                total,
+                mem_total_st_pos,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                A_BOLD);
+}
+
+void set_memory_used_state(struct window_data *win_data,float used_data){
+        if(win_data == NULL)return;
+
+        struct vec2 win_size ={0,0};
+        get_window_size(win_data,&win_size);
+        wchar_t str[16];
+        
+        int joint_result = 
+                swprintf(str,sizeof(str),L"Used: %0.1f GiB",used_data);
+        int mem_used_str_st_pos_x = (win_size.x - joint_result)/2;
+        struct vec2 mem_used_str_st_pos  = {mem_used_str_st_pos_x,2};
+
+        set_chr(win_data,
+                str,
+                mem_used_str_st_pos,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                A_NORMAL);
+
+        set_line(win_data,(struct color_pair){COLOR_DEFAULT,COLOR_WHITE},mem_used_str_st_pos.y);
+}
+
+int set_line(struct window_data *win_data,struct color_pair color_pair,int line){
+        static int line_counter = 0;
+        if(win_data == NULL)return line_counter;
+        if(win_data->line == NULL){
+                line_memory_allocate(win_data);
+        }
+        win_data->line[line_counter].line = line;
+        win_data->line[line_counter].color = color_pair;  
+        line_counter++;
+        return line_counter;
+}
+
+void line_memory_allocate(struct window_data *win_data){
+        if(win_data == NULL || win_data->line != NULL)return;
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+        if(win_data->line == NULL){
+                win_data->line = calloc(win_size.y,sizeof(struct line));
+                if(win_data->line == NULL){
+                        exit(1);
+                }
+        }
+        else{
+                struct line *tmp_line = realloc(win_data->line,win_size.y);
+                if(tmp_line == NULL){
+                        exit(1);
+                }   
+                win_data->line = tmp_line;
+        }
+        return;
+}
+
+struct line_result get_line_data(struct window_data *win_data){
+        if(win_data == NULL)return (struct line_result){NULL,0};
+        struct line_result tmp_line;
+        int line_num = set_line(NULL,(struct color_pair){0,0},0);
+        if(line_num <= 0)return (struct line_result){NULL,0};
+        tmp_line.line_data = calloc(line_num,sizeof(struct line));
+        if(tmp_line.line_data == NULL)return (struct line_result){NULL,0};
+        memcpy(tmp_line.line_data,win_data->line,sizeof(struct line) * line_num);
+        struct line_result tmp_line_result = {tmp_line.line_data,line_num};
+        return tmp_line_result;
+}
+void get_window_list(struct window_data ***win_list,int *win_num){
+        if(win_list == NULL || win_num == NULL)return;
+        *win_list = winlist;
+        *win_num = windowlist_count;
+}
+
+
+int free_window(struct window_data **win_data){
+        if(win_data == NULL || *win_data == NULL)return -1;
+
+        struct window_data *target = *win_data;
+        for(int i = 0;i < target->chr_data.chr_data_count;i++){
+                if(target->chr_data.chr_data[i] == NULL)continue;
+                free(target->chr_data.chr_data[i]->chr_data);
+                free(target->chr_data.chr_data[i]);
+        }
+        free(target->chr_data.chr_data);
+        free(target->line);
+
+        return window_list_ctrl(win_data,windowlist_remove);
 }

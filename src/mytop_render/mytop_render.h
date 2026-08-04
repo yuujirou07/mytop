@@ -11,7 +11,6 @@
 
 
 
-
 //背景色8種×文字色8種の64通りを、あらかじめ全部カラーペアとして登録する
 //idはbg*8+fgで決め打ちなので、後から(bg,fg)で引ける
 void set_color();
@@ -63,5 +62,6 @@ void render_msg_data(struct window_data *win_data);
 //積んである文字列の表示位置を、枠線の内側へ収まるよう丸める
 //入りきらない長さの文字列は内側の幅で切り詰める
 void check_msg_data(struct window_data *win_data);
+void render_line(struct window_data *win_data);
 
 #endif

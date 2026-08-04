@@ -6,6 +6,8 @@
 #include <ncurses.h>
 #include <locale.h>
 #include <string.h>
+#include <wchar.h>
+#include<stdlib.h>
 
 #define color_pair_max 128
 
@@ -213,6 +215,7 @@ int render_window(struct window_data *win_data){
         werase(win);
         check_msg_data(win_data);
         render_window_outline(win_data);
+        render_line(win_data);
         render_msg_data(win_data);
 
         return 0;
@@ -359,4 +362,25 @@ void check_msg_data(struct window_data *win_data){
                 else if(msg->chr_st_pos.y > max_y)msg->chr_st_pos.y = max_y;
         }
 
+}
+
+
+void render_line(struct window_data *win_data){
+        if(win_data == NULL)return;
+        struct line_result line_data = get_line_data(win_data);
+        if(line_data.line_data == NULL)return;
+        struct vec2 win_size;
+        get_window_size(win_data,&win_size);
+        wchar_t line[win_size.x+1];
+        line[0] = L'\u251C';
+        wmemset(&line[1],L'\u2500',(win_size.x-2));
+        line[win_size.x-1] = L'\u2524';
+        line[win_size.x] = L'\0';
+        WINDOW *win = get_window_handle(win_data);
+        for(int i = 0;i < line_data.line_num;i++){
+                if(line_data.line_data[i].line > win_size.y || 
+                        line_data.line_data[i].line < 0)continue;
+                        mvwaddwstr(win,line_data.line_data->line,0,line);
+        }
+        free(line_data.line_data);
 }
