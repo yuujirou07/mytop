@@ -18,4 +18,6 @@ struct mem_info{
         char swap_free[mem_info_value_size];
 };
 
+void memory_size_ctl(float *total,int flags);
+
 #endif

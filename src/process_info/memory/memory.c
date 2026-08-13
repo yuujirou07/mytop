@@ -1,6 +1,7 @@
 #include "memory.h"
 #include<stdio.h>
 #include<string.h>
+#include"core.h"
 #include"process_info/process_info.h"
 
 
@@ -62,4 +63,17 @@ void get_memory_info(struct device_info_result *dev_result,const char *path){
         fclose(file);
         dev_result->device_name = memory;
         dev_result->device_data.mem_info = mem_info;
+}
+
+void memory_size_ctl(float *total,int flags){
+        if(total == NULL)return;
+        static float static_total = 0;
+        if(flags == set){
+                static_total = *total;
+                return;
+        }
+        else if(flags == get){
+                *total = static_total;
+                return;
+        }
 }

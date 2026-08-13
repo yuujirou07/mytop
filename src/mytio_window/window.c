@@ -404,10 +404,22 @@ void set_device_data(struct window_data *win_data,enum device dev){
                 }
                 case memory:{
                         struct mem_info mem_info = device_result.device_data.mem_info;
+                
                         float mem_total= atof(mem_info.mem_total)/pow(10,6);
+                        float mem_available = atof(mem_info.mem_available)/pow(10,6);
+                        float mem_cached = atof(mem_info.cached)/pow(10,6);
+                        float mem_free = atof(mem_info.mem_free)/pow(10,6);
+                        float mem_used = mem_total - mem_available;
                         set_memory_total(win_data,mem_total);
-                        set_memory_used_state(win_data,10);
+                        set_memory_total_used_state(win_data,mem_used);
+                        set_memory_total_used_state_graph(win_data,mem_used);
+                        set_memory_cached_state(win_data,mem_cached);
+                        set_memory_cached_state_graph(win_data,mem_cached);
+                        set_memory_free_state(win_data,mem_free);
+                        set_memory_free_state_graph(win_data,mem_free);
                         
+
+
                 }
                 
                 default:
@@ -700,6 +712,8 @@ struct box get_window_empty_space(struct window_data *win_data){
 void set_memory_total(struct window_data *win_data,float memory_total){
         if(win_data == NULL)return;
 
+        memory_size_ctl(&memory_total,set);
+
         struct vec2 win_size = {0,0};
         get_window_size(win_data,&win_size);
         wchar_t total[16];
@@ -718,7 +732,7 @@ void set_memory_total(struct window_data *win_data,float memory_total){
                 A_BOLD);
 }
 
-void set_memory_used_state(struct window_data *win_data,float used_data){
+void set_memory_total_used_state(struct window_data *win_data,float used_data){
         if(win_data == NULL)return;
 
         struct vec2 win_size ={0,0};
@@ -727,6 +741,7 @@ void set_memory_used_state(struct window_data *win_data,float used_data){
         
         int joint_result = 
                 swprintf(str,sizeof(str),L"Used: %0.1f GiB",used_data);
+
         int mem_used_str_st_pos_x = (win_size.x - joint_result)/2;
         struct vec2 mem_used_str_st_pos  = {mem_used_str_st_pos_x,2};
 
@@ -736,7 +751,9 @@ void set_memory_used_state(struct window_data *win_data,float used_data){
                 (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
                 A_NORMAL);
 
-        set_line(win_data,(struct color_pair){COLOR_DEFAULT,COLOR_WHITE},mem_used_str_st_pos.y);
+        set_line(win_data,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                mem_used_str_st_pos.y);
 }
 
 int set_line(struct window_data *win_data,struct color_pair color_pair,int line){
@@ -752,7 +769,7 @@ int set_line(struct window_data *win_data,struct color_pair color_pair,int line)
 }
 
 void line_memory_allocate(struct window_data *win_data){
-        if(win_data == NULL || win_data->line != NULL)return;
+        if(win_data == NULL)return;
         struct vec2 win_size = {0,0};
         get_window_size(win_data,&win_size);
         if(win_data->line == NULL){
@@ -802,4 +819,238 @@ int free_window(struct window_data **win_data){
         free(target->line);
 
         return window_list_ctrl(win_data,windowlist_remove);
+}
+void set_memory_total_used_state_graph(struct window_data *win_data,float used_data){
+        if(win_data == NULL)return;
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+
+        //ウィンドウサイズがグラフを描く５行未満だと関数を終わる
+        if(win_size.y < 5)return;
+
+        wchar_t buff[32] ={0};
+        float mem_total = 0;
+        memory_size_ctl(&mem_total,get);
+        if(mem_total <= 0)return;
+        int mem_ratio = used_data/mem_total * 100;
+
+        int color = COLOR_GREEN;
+        if(mem_ratio > 50)color = COLOR_YELLOW;
+        if(mem_ratio > 90)color = COLOR_RED;
+
+        int str_size =
+                swprintf(buff,32,L"%.1fG/%.1fG %d%%",
+                        used_data,mem_total,mem_ratio);
+        int graph_line_size = win_size.x -5 - str_size;
+        if(graph_line_size <= 0)return;
+        int graph_end_pos = 2 + graph_line_size;
+        int usage_str_pos = graph_end_pos + 2;
+
+        //メモリ使用率のグラフのメモリ
+        int mem_graph_memory = graph_line_size * mem_ratio/100;
+        if(mem_graph_memory < 0)mem_graph_memory = 0;
+
+        if(mem_graph_memory > graph_line_size)mem_graph_memory = graph_line_size;
+
+        wchar_t graph_used_space_buff[mem_graph_memory + 1];
+        for(int i = 0;i < mem_graph_memory;i++){
+                graph_used_space_buff[i] = L'|';
+        }
+        graph_used_space_buff[mem_graph_memory] = L'\0';
+
+        wchar_t graph_unused_space_buff[graph_line_size + 1];
+        for(int i = 0;i < graph_line_size - mem_graph_memory;i++){
+                graph_unused_space_buff[i] = L'|';
+        }
+        graph_unused_space_buff[graph_line_size - mem_graph_memory] = L'\0';
+        
+        wchar_t graph_st_chr[2] = {L'[',L'\0'};
+        wchar_t graph_end_chr[2] = {L']',L'\0'};
+
+
+        //グラフの使用グラフ部分
+        set_chr(win_data,graph_used_space_buff,(struct vec2){2,3},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+        
+        //使われていないスペースの部分
+        set_chr(win_data,graph_unused_space_buff,(struct vec2){2 + mem_graph_memory,3},
+                (struct color_pair){COLOR_DEFAULT,COLOR_BLACK},A_NORMAL);
+
+        //使用率の数値
+        set_chr(win_data,buff,(struct vec2){usage_str_pos,3},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+
+        //グラフの初めの括弧
+        set_chr(win_data,graph_st_chr,(struct vec2){1,3},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
+
+        //グラフ終わりの括弧
+        set_chr(win_data,graph_end_chr,(struct vec2){graph_end_pos,3},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
+
+}
+
+
+
+void set_memory_cached_state(struct window_data *win_data,float cached_data){
+        if(win_data == NULL)return;
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+        if(win_size.y < 6)return;
+        wchar_t str[20];
+
+        int joint_result =
+                swprintf(str,20,L"Cached: %.1f GiB",cached_data);
+
+        int cached_str_st_pos_x = (win_size.x - joint_result)/2;
+        struct vec2 cached_str_st_pos = {cached_str_st_pos_x,4};
+
+        set_chr(win_data,
+                str,
+                cached_str_st_pos,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                A_NORMAL);
+
+        set_line(win_data,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                cached_str_st_pos.y);
+}
+
+void set_memory_cached_state_graph(struct window_data *win_data,float cached_data){
+        if(win_data == NULL)return;
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+        if(win_size.y < 7)return;
+
+        wchar_t buff[32] = {0};
+        float mem_total = 0;
+        memory_size_ctl(&mem_total,get);
+        if(mem_total <= 0)return;
+        int mem_ratio = cached_data/mem_total * 100;
+
+        int color = COLOR_GREEN;
+        if(mem_ratio > 50)color = COLOR_YELLOW;
+        if(mem_ratio > 90)color = COLOR_RED;
+
+        int str_size =
+                swprintf(buff,32,L"%.1fG/%.1fG %d%%",
+                        cached_data,mem_total,mem_ratio);
+        int graph_line_size = win_size.x -5 - str_size;
+        if(graph_line_size <= 0)return;
+        int graph_end_pos = 2 + graph_line_size;
+        int usage_str_pos = graph_end_pos + 2;
+
+        int mem_graph_memory = graph_line_size * mem_ratio/100;
+        if(mem_graph_memory < 0)mem_graph_memory = 0;
+        if(mem_graph_memory > graph_line_size)mem_graph_memory = graph_line_size;
+
+        wchar_t graph_cached_space_buff[mem_graph_memory + 1];
+        for(int i = 0;i < mem_graph_memory;i++){
+                graph_cached_space_buff[i] = L'|';
+        }
+        graph_cached_space_buff[mem_graph_memory] = L'\0';
+
+        wchar_t graph_unused_space_buff[graph_line_size + 1];
+        for(int i = 0;i < graph_line_size - mem_graph_memory;i++){
+                graph_unused_space_buff[i] = L'|';
+        }
+        graph_unused_space_buff[graph_line_size - mem_graph_memory] = L'\0';
+
+        wchar_t graph_st_chr[2] = {L'[',L'\0'};
+        wchar_t graph_end_chr[2] = {L']',L'\0'};
+
+        set_chr(win_data,graph_cached_space_buff,(struct vec2){2,5},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+        set_chr(win_data,graph_unused_space_buff,(struct vec2){2 + mem_graph_memory,5},
+                (struct color_pair){COLOR_DEFAULT,COLOR_BLACK},A_NORMAL);
+        set_chr(win_data,buff,(struct vec2){usage_str_pos,5},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+        set_chr(win_data,graph_st_chr,(struct vec2){1,5},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
+        set_chr(win_data,graph_end_chr,(struct vec2){graph_end_pos,5},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
+}
+
+void set_memory_free_state(struct window_data *win_data,float free_data){
+        if(win_data == NULL)return;
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+        if(win_size.y < 8)return;
+        wchar_t str[20];
+
+        int joint_result =
+                swprintf(str,20,L"Free: %.1f GiB",free_data);
+
+        int free_str_st_pos_x = (win_size.x - joint_result)/2;
+        struct vec2 free_str_st_pos = {free_str_st_pos_x,6};
+
+        set_chr(win_data,
+                str,
+                free_str_st_pos,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                A_NORMAL);
+
+        set_line(win_data,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                free_str_st_pos.y);
+}
+
+void set_memory_free_state_graph(struct window_data *win_data,float free_data){
+        if(win_data == NULL)return;
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+        if(win_size.y < 9)return;
+
+        wchar_t buff[32] = {0};
+        float mem_total = 0;
+        memory_size_ctl(&mem_total,get);
+        if(mem_total <= 0)return;
+        int mem_ratio = free_data/mem_total * 100;
+
+        int color = COLOR_GREEN;
+        if(mem_ratio < 60)color = COLOR_YELLOW;
+        if(mem_ratio < 30)color = COLOR_RED;
+
+        int str_size =
+                swprintf(buff,32,L"%.1fG/%.1fG %d%%",
+                        free_data,mem_total,mem_ratio);
+        int graph_line_size = win_size.x -5 - str_size;
+        if(graph_line_size <= 0)return;
+        int graph_end_pos = 2 + graph_line_size;
+        int usage_str_pos = graph_end_pos + 2;
+
+        int mem_graph_memory = graph_line_size * mem_ratio/100;
+        if(mem_graph_memory < 0)mem_graph_memory = 0;
+        if(mem_graph_memory > graph_line_size)mem_graph_memory = graph_line_size;
+
+        wchar_t graph_free_space_buff[mem_graph_memory + 1];
+        for(int i = 0;i < mem_graph_memory;i++){
+                graph_free_space_buff[i] = L'|';
+        }
+        graph_free_space_buff[mem_graph_memory] = L'\0';
+
+        wchar_t graph_used_space_buff[graph_line_size + 1];
+        for(int i = 0;i < graph_line_size - mem_graph_memory;i++){
+                graph_used_space_buff[i] = L'|';
+        }
+        graph_used_space_buff[graph_line_size - mem_graph_memory] = L'\0';
+
+        wchar_t graph_st_chr[2] = {L'[',L'\0'};
+        wchar_t graph_end_chr[2] = {L']',L'\0'};
+
+        set_chr(win_data,graph_free_space_buff,(struct vec2){2,7},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+        set_chr(win_data,graph_used_space_buff,(struct vec2){2 + mem_graph_memory,7},
+                (struct color_pair){COLOR_DEFAULT,COLOR_BLACK},A_NORMAL);
+        set_chr(win_data,buff,(struct vec2){usage_str_pos,7},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+        set_chr(win_data,graph_st_chr,(struct vec2){1,7},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
+        set_chr(win_data,graph_end_chr,(struct vec2){graph_end_pos,7},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
 }

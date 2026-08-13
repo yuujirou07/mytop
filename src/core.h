@@ -15,6 +15,7 @@
 #endif
 
 
+
 struct window_data;
 struct outline;
 struct color_pair;
@@ -24,7 +25,10 @@ struct cell_data;
 struct line_color;
 enum line_side;
 
-
+enum flags{
+        get = 0,
+        set = 1,
+};
 
 
 struct color_pair{

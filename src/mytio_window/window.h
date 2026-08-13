@@ -95,9 +95,14 @@ void set_cpu_core_glaph(struct window_data *win_data,int core_id,
 void set_cpu_total_use_glaph(struct window_data *win_data,int num_percet);
 struct color_pair get_window_msg_color_pair(struct window_data *win_data,int msg_num);
 void set_memory_total(struct window_data *win_data,float memory_total);
-void set_memory_used_state(struct window_data *win_data,float used_data);
+void set_memory_total_used_state(struct window_data *win_data,float used_data);
 void line_memory_allocate(struct window_data *win_data);
 int set_line(struct window_data *win_data,struct color_pair color_pair,int line);
 struct line_result get_line_data(struct window_data *win_data);
 int free_window(struct window_data **win_data);
+void set_memory_total_used_state_graph(struct window_data *win_data,float used_data);
+void set_memory_cached_state(struct window_data *win_data,float cached_data);
+void set_memory_cached_state_graph(struct window_data *win_data,float cached_data);
+void set_memory_free_state(struct window_data *win_data,float free_data);
+void set_memory_free_state_graph(struct window_data *win_data,float free_data);
 #endif

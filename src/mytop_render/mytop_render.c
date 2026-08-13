@@ -378,9 +378,9 @@ void render_line(struct window_data *win_data){
         line[win_size.x] = L'\0';
         WINDOW *win = get_window_handle(win_data);
         for(int i = 0;i < line_data.line_num;i++){
-                if(line_data.line_data[i].line > win_size.y || 
+                if(line_data.line_data[i].line >= win_size.y || 
                         line_data.line_data[i].line < 0)continue;
-                        mvwaddwstr(win,line_data.line_data->line,0,line);
+                        mvwaddwstr(win,line_data.line_data[i].line,0,line);
         }
         free(line_data.line_data);
 }
