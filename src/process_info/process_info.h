@@ -32,7 +32,6 @@ extern const char *device_info_dir_names[device_count];
 
 
 
-//指定したデバイス(cpu/gpu/memory)の情報を取得する(未実装)
 void check_detectable_parts(struct found_device_parts_table *device_table);
 void get_cpu_info(struct device_info_result *dev_result,const char *path);
 struct device_info_result get_device_info(enum device dev);

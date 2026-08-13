@@ -75,7 +75,7 @@ struct chr_data{
 };
 
 struct chr_data_arry{
-        struct chr_data **chr_data;
+        struct chr_data *chr_data;
         int allocate_num;
         int chr_data_count;
 };

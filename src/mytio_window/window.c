@@ -15,7 +15,7 @@
 #include "theme.h"
 
 
-static void set_cpu_cores_info(struct window_data *win_data,int cores_num);
+static void set_cpu_cores_info(struct window_data *win_data,struct cpu_info cpu_info,int cores_num);
 
 //長方形(位置・サイズ)の管理はncursesのWINDOWに任せる
 //そのためwindow_data側では位置とサイズを持たない
@@ -26,7 +26,10 @@ struct window_data{
         struct chr_data_arry chr_data;
         struct outline outline;
         struct line *line;
+        int line_count;
+        int line_capacity;
         struct window_data *parent_window_data;
+        enum device dev;
 };
 
 static struct window_data *winlist[winlist_max] = {0};
@@ -68,7 +71,7 @@ struct window_data *create_window(struct window_data **parent_win){
         struct window_data *tmp_win_data =
                 calloc(1,sizeof(struct window_data));
         if(tmp_win_data == NULL)return NULL;
-        tmp_win_data->chr_data.chr_data = calloc(8,sizeof(struct chr_data *));
+        tmp_win_data->chr_data.chr_data = calloc(8,sizeof(struct chr_data));
         if(tmp_win_data->chr_data.chr_data == NULL){
                 free(tmp_win_data);
                 return NULL;
@@ -76,6 +79,9 @@ struct window_data *create_window(struct window_data **parent_win){
         tmp_win_data->chr_data.chr_data_count = 0;
         tmp_win_data->chr_data.allocate_num = 8;
         tmp_win_data->line = NULL;
+        tmp_win_data->line_count = 0;
+        tmp_win_data->line_capacity = 0;
+        tmp_win_data->dev = device_count;
 
         //実際の位置とサイズはset_window_pos()/set_window_size()で決めるので
         //ここでは最小サイズのWINDOWを作っておく
@@ -337,7 +343,7 @@ void set_chr(struct window_data *win_data,
 
         if(win_data->chr_data.chr_data_count >= win_data->chr_data.allocate_num){
                 int new_allocate_num = win_data->chr_data.allocate_num * 2;
-                struct chr_data **tmp_chr_data =
+                struct chr_data *tmp_chr_data =
                         realloc(win_data->chr_data.chr_data,
                                 sizeof(*tmp_chr_data) * new_allocate_num);
                 if(tmp_chr_data == NULL)return;
@@ -345,20 +351,29 @@ void set_chr(struct window_data *win_data,
                 win_data->chr_data.allocate_num = new_allocate_num;
         }
 
-        struct chr_data *new_chr_data = calloc(1,sizeof(*new_chr_data));
-        if(new_chr_data == NULL)return;
         size_t msg_size = wcslen(msg) + 1;
-        new_chr_data->chr_data = malloc(sizeof(wchar_t) * msg_size);
-        if(new_chr_data->chr_data == NULL){
-                free(new_chr_data);
-                return;
-        }
-        wmemcpy(new_chr_data->chr_data,msg,msg_size);
-        new_chr_data->chr_color = color;
-        new_chr_data->chr_st_pos = msg_start_pos;
-        new_chr_data->style = style;
-        win_data->chr_data.chr_data[win_data->chr_data.chr_data_count] = new_chr_data;
+        wchar_t *msg_copy = malloc(sizeof(wchar_t) * msg_size);
+        if(msg_copy == NULL)return;
+        wmemcpy(msg_copy,msg,msg_size);
+
+        struct chr_data *new_chr_data =
+                &win_data->chr_data.chr_data[win_data->chr_data.chr_data_count];
+        *new_chr_data = (struct chr_data){
+                .chr_st_pos = msg_start_pos,
+                .chr_data = msg_copy,
+                .chr_color = color,
+                .style = style
+        };
         win_data->chr_data.chr_data_count++;
+}
+
+void clear_window_chr_data(struct window_data *win_data){
+        if(win_data == NULL)return;
+        for(int i = 0;i < win_data->chr_data.chr_data_count;i++){
+                free(win_data->chr_data.chr_data[i].chr_data);
+                win_data->chr_data.chr_data[i].chr_data = NULL;
+        }
+        win_data->chr_data.chr_data_count = 0;
 }
 
 struct chr_data_arry get_window_msg_data(struct window_data *win_data){
@@ -395,11 +410,11 @@ void set_device_data(struct window_data *win_data,enum device dev){
                 is_found = true;
         }
         if(is_found == false)return;
-
+        win_data->dev = dev;
         switch(device_result.device_name){
                 case cpu:{
                         struct cpu_info cpu_info = device_result.device_data.cpu_info;
-                        set_cpu_cores_info(win_data,atoi(cpu_info.cpu_cores));
+                        set_cpu_cores_info(win_data,cpu_info,atoi(cpu_info.cpu_cores));
                         break;
                 }
                 case memory:{
@@ -429,11 +444,12 @@ void set_device_data(struct window_data *win_data,enum device dev){
 }
 
 
-void set_cpu_cores_info(struct window_data *win_data,int cores_num){
+void set_cpu_cores_info(struct window_data *win_data,struct cpu_info cpu_info,int cores_num){
         if(win_data == NULL)return;
 
         struct vec2 win_size = {0,0};
         get_window_size(win_data,&win_size);
+
         set_cpu_total_use_glaph(win_data,20);
         int core_pos_y = 2;
         int win_split_size = win_size.x/2;
@@ -482,9 +498,9 @@ void set_cpu_core_glaph(struct window_data *win_data,int core_id,struct vec2 gla
         int palm_num_len = 2;
         int tmp_palms = 0;
         if(core_use_data.core_palm_data != NULL){
-                if(core_use_data.core_palm_data[core_use_data.core_palm_size] > 99)palm_num_len = 4;
-                else if(core_use_data.core_palm_data[core_use_data.core_palm_size] > 10)palm_num_len = 3;
-                tmp_palms = core_use_data.core_palm_data[core_use_data.core_palm_size];
+                if(core_use_data.core_palm_data[core_use_data.core_palm_size -1] > 99)palm_num_len = 4;
+                else if(core_use_data.core_palm_data[core_use_data.core_palm_size - 1 ] > 10)palm_num_len = 3;
+                tmp_palms = core_use_data.core_palm_data[core_use_data.core_palm_size -1];
         }
         wchar_t palams_num[palm_num_len+1];//'\0'用に＋1する
         int joint_result = 
@@ -591,8 +607,7 @@ struct color_pair get_window_msg_color_pair(struct window_data *win_data,int msg
         struct color_pair default_col_pair = {COLOR_DEFAULT,COLOR_DEFAULT};
         if(win_data == NULL)return default_col_pair;
         struct color_pair tmp_col_pair = default_col_pair;
-        if(win_data->chr_data.chr_data[msg_num] == NULL)return tmp_col_pair;
-        tmp_col_pair = win_data->chr_data.chr_data[msg_num]->chr_color;
+        tmp_col_pair = win_data->chr_data.chr_data[msg_num].chr_color;
         return tmp_col_pair;
 }
 
@@ -757,41 +772,36 @@ void set_memory_total_used_state(struct window_data *win_data,float used_data){
 }
 
 int set_line(struct window_data *win_data,struct color_pair color_pair,int line){
-        static int line_counter = 0;
-        if(win_data == NULL)return line_counter;
-        if(win_data->line == NULL){
-                line_memory_allocate(win_data);
+        if(win_data == NULL)return 0;
+        for(int i = 0;i < win_data->line_count;i++){
+                if(win_data->line[i].line != line)continue;
+                win_data->line[i].color = color_pair;
+                return win_data->line_count;
         }
-        win_data->line[line_counter].line = line;
-        win_data->line[line_counter].color = color_pair;  
-        line_counter++;
-        return line_counter;
+        if(win_data->line_count >= win_data->line_capacity){
+                line_memory_allocate(win_data);
+                if(win_data->line_count >= win_data->line_capacity)return win_data->line_count;
+        }
+        win_data->line[win_data->line_count].line = line;
+        win_data->line[win_data->line_count].color = color_pair;
+        win_data->line_count++;
+        return win_data->line_count;
 }
 
 void line_memory_allocate(struct window_data *win_data){
         if(win_data == NULL)return;
-        struct vec2 win_size = {0,0};
-        get_window_size(win_data,&win_size);
-        if(win_data->line == NULL){
-                win_data->line = calloc(win_size.y,sizeof(struct line));
-                if(win_data->line == NULL){
-                        exit(1);
-                }
-        }
-        else{
-                struct line *tmp_line = realloc(win_data->line,win_size.y);
-                if(tmp_line == NULL){
-                        exit(1);
-                }   
-                win_data->line = tmp_line;
-        }
-        return;
+        int new_capacity = win_data->line_capacity == 0 ? 4 : win_data->line_capacity * 2;
+        struct line *tmp_line = realloc(win_data->line,
+                sizeof(*tmp_line) * new_capacity);
+        if(tmp_line == NULL)return;
+        win_data->line = tmp_line;
+        win_data->line_capacity = new_capacity;
 }
 
 struct line_result get_line_data(struct window_data *win_data){
         if(win_data == NULL)return (struct line_result){NULL,0};
         struct line_result tmp_line;
-        int line_num = set_line(NULL,(struct color_pair){0,0},0);
+        int line_num = win_data->line_count;
         if(line_num <= 0)return (struct line_result){NULL,0};
         tmp_line.line_data = calloc(line_num,sizeof(struct line));
         if(tmp_line.line_data == NULL)return (struct line_result){NULL,0};
@@ -810,11 +820,7 @@ int free_window(struct window_data **win_data){
         if(win_data == NULL || *win_data == NULL)return -1;
 
         struct window_data *target = *win_data;
-        for(int i = 0;i < target->chr_data.chr_data_count;i++){
-                if(target->chr_data.chr_data[i] == NULL)continue;
-                free(target->chr_data.chr_data[i]->chr_data);
-                free(target->chr_data.chr_data[i]);
-        }
+        clear_window_chr_data(target);
         free(target->chr_data.chr_data);
         free(target->line);
 
@@ -833,14 +839,14 @@ void set_memory_total_used_state_graph(struct window_data *win_data,float used_d
         float mem_total = 0;
         memory_size_ctl(&mem_total,get);
         if(mem_total <= 0)return;
-        int mem_ratio = used_data/mem_total * 100;
+        float mem_ratio = used_data/mem_total * 100;
 
         int color = COLOR_GREEN;
         if(mem_ratio > 50)color = COLOR_YELLOW;
         if(mem_ratio > 90)color = COLOR_RED;
 
         int str_size =
-                swprintf(buff,32,L"%.1fG/%.1fG %d%%",
+                swprintf(buff,32,L"%.2fG/%.2fG %.2f%%",
                         used_data,mem_total,mem_ratio);
         int graph_line_size = win_size.x -5 - str_size;
         if(graph_line_size <= 0)return;
@@ -848,7 +854,7 @@ void set_memory_total_used_state_graph(struct window_data *win_data,float used_d
         int usage_str_pos = graph_end_pos + 2;
 
         //メモリ使用率のグラフのメモリ
-        int mem_graph_memory = graph_line_size * mem_ratio/100;
+        int mem_graph_memory = graph_line_size * used_data/mem_total;
         if(mem_graph_memory < 0)mem_graph_memory = 0;
 
         if(mem_graph_memory > graph_line_size)mem_graph_memory = graph_line_size;
@@ -929,21 +935,21 @@ void set_memory_cached_state_graph(struct window_data *win_data,float cached_dat
         float mem_total = 0;
         memory_size_ctl(&mem_total,get);
         if(mem_total <= 0)return;
-        int mem_ratio = cached_data/mem_total * 100;
+        float mem_ratio = cached_data/mem_total * 100;
 
         int color = COLOR_GREEN;
         if(mem_ratio > 50)color = COLOR_YELLOW;
         if(mem_ratio > 90)color = COLOR_RED;
 
         int str_size =
-                swprintf(buff,32,L"%.1fG/%.1fG %d%%",
+                swprintf(buff,32,L"%.2fG/%.2fG %.2f%%",
                         cached_data,mem_total,mem_ratio);
         int graph_line_size = win_size.x -5 - str_size;
         if(graph_line_size <= 0)return;
         int graph_end_pos = 2 + graph_line_size;
         int usage_str_pos = graph_end_pos + 2;
 
-        int mem_graph_memory = graph_line_size * mem_ratio/100;
+        int mem_graph_memory = graph_line_size * cached_data/mem_total;
         if(mem_graph_memory < 0)mem_graph_memory = 0;
         if(mem_graph_memory > graph_line_size)mem_graph_memory = graph_line_size;
 
@@ -1010,21 +1016,21 @@ void set_memory_free_state_graph(struct window_data *win_data,float free_data){
         float mem_total = 0;
         memory_size_ctl(&mem_total,get);
         if(mem_total <= 0)return;
-        int mem_ratio = free_data/mem_total * 100;
+        float mem_ratio = free_data/mem_total * 100;
 
         int color = COLOR_GREEN;
         if(mem_ratio < 60)color = COLOR_YELLOW;
         if(mem_ratio < 30)color = COLOR_RED;
 
         int str_size =
-                swprintf(buff,32,L"%.1fG/%.1fG %d%%",
+                swprintf(buff,32,L"%.2fG/%.2fG %.2f%%",
                         free_data,mem_total,mem_ratio);
         int graph_line_size = win_size.x -5 - str_size;
         if(graph_line_size <= 0)return;
         int graph_end_pos = 2 + graph_line_size;
         int usage_str_pos = graph_end_pos + 2;
 
-        int mem_graph_memory = graph_line_size * mem_ratio/100;
+        int mem_graph_memory = graph_line_size * free_data/mem_total;
         if(mem_graph_memory < 0)mem_graph_memory = 0;
         if(mem_graph_memory > graph_line_size)mem_graph_memory = graph_line_size;
 
@@ -1053,4 +1059,9 @@ void set_memory_free_state_graph(struct window_data *win_data,float free_data){
                 (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
         set_chr(win_data,graph_end_chr,(struct vec2){graph_end_pos,7},
                 (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
+}
+
+enum device *get_window_draw_dev(struct window_data *win_data){
+        if(win_data == NULL || win_data->dev == device_count )return NULL;
+        return &win_data->dev;
 }

@@ -2,6 +2,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<time.h>
 #include"core.h"
 #include "cpu_info.h"
 #include"window.h"
@@ -23,7 +24,10 @@ int main(int argc,char **argv){
         //端末の背景をそのまま使う
         //COLOR_BLACKを指定すると、背景を透過させている端末で黒く塗り潰される
         set_background(COLOR_DEFAULT);
+        timeout(100);
         window_push_screen();
+        struct timespec last_update;
+        clock_gettime(CLOCK_MONOTONIC,&last_update);
         while(1){
                 int ch = getch();
                 if(ch == 'q'){
@@ -32,7 +36,29 @@ int main(int argc,char **argv){
                 else if(ch == KEY_RESIZE){
                         
                 }
-                addch(ch);
+
+                struct timespec now;
+                clock_gettime(CLOCK_MONOTONIC,&now);
+                double elapsed =
+                now.tv_sec - last_update.tv_sec +
+                (now.tv_nsec - last_update.tv_nsec) / 1000000000.0;
+
+                if(elapsed >= 1.0){
+                        last_update = now;
+                        struct window_data **win_list = NULL;
+                        int win_num = 0;
+                        get_window_list(&win_list,&win_num);
+
+                        for(int i = 0; i < win_num;i++){
+                                enum device *dev = get_window_draw_dev(win_list[i]);
+                                if(dev == NULL)continue;
+                                clear_window_chr_data(win_list[i]);
+                                set_device_data(win_list[i],*dev);
+                                render_window(win_list[i]);
+                        }
+                        window_push_screen();
+                }
+
         }
 
         end_process();

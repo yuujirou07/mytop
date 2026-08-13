@@ -79,6 +79,7 @@ void get_window_outline_color(struct window_data *win_data,struct line_color *li
 void set_chr(struct window_data *win_data,
         const wchar_t *msg,struct vec2 msg_start_pos,
         struct color_pair color,attr_t style);
+void clear_window_chr_data(struct window_data *win_data);
 
 //積んである文字列データをまとめて返す
 struct chr_data_arry get_window_msg_data(struct window_data *win_data);
@@ -105,4 +106,5 @@ void set_memory_cached_state(struct window_data *win_data,float cached_data);
 void set_memory_cached_state_graph(struct window_data *win_data,float cached_data);
 void set_memory_free_state(struct window_data *win_data,float free_data);
 void set_memory_free_state_graph(struct window_data *win_data,float free_data);
+enum device *get_window_draw_dev(struct window_data *win_data);
 #endif

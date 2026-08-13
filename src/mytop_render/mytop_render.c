@@ -311,7 +311,7 @@ void render_msg_data(struct window_data *win_data){
                         get_window_msg_color_pair(win_data,i);
                 int col_id = 0;
                 int int_col_pair[2] = {col_pair.bg_color,col_pair.fg_color};
-                struct chr_data *chr_data = chr_arry.chr_data[i];
+                struct chr_data *chr_data = &chr_arry.chr_data[i];
                 if(color_pair_dic(&col_id,int_col_pair,col_pair_dic_get) != 0)continue;
                 wattrset(win,COLOR_PAIR(col_id) | chr_data->style);
                 mvwaddwstr(win,chr_data->chr_st_pos.y,chr_data->chr_st_pos.x,chr_data->chr_data);
@@ -336,8 +336,8 @@ void check_msg_data(struct window_data *win_data){
 
         struct chr_data_arry msg_data = get_window_msg_data(win_data);
         for(int i = 0;i < msg_data.chr_data_count;i++){
-                struct chr_data *msg = msg_data.chr_data[i];
-                if(msg == NULL || msg->chr_data == NULL)continue;
+                struct chr_data *msg = &msg_data.chr_data[i];
+                if(msg->chr_data == NULL)continue;
 
                 int content_w = max_x - min_x + 1;
                 int msg_width = 0;
