@@ -29,6 +29,7 @@ struct cpu_info{
 };
 
 void set_core_usage_rate(int core_id,int usage);
+void free_cpu_usage_data(void);
 //返されるポインタは内部所有なので、呼び出し側では変更・解放しない
 struct core_use_data get_core_usage_rate(int core_id);
 

@@ -103,7 +103,12 @@ struct window_data *create_window(struct window_data **parent_win){
 
         if(parent_win != NULL)tmp_win_data->parent_window_data = *parent_win;
         else tmp_win_data->parent_window_data = NULL;
-        window_list_ctrl(&tmp_win_data,windowlist_add);
+        if(window_list_ctrl(&tmp_win_data,windowlist_add) != 0){
+                delwin(tmp_win_data->win);
+                free(tmp_win_data->chr_data.chr_data);
+                free(tmp_win_data);
+                return NULL;
+        }
         return tmp_win_data;
 }
 
@@ -397,7 +402,7 @@ struct window_data *get_parent_win(struct window_data *win_data){
 
 void set_device_data(struct window_data *win_data,enum device dev){
         if(win_data == NULL)return;
-        struct found_device_parts_table parts_table;
+        struct found_device_parts_table parts_table = {0};
         //端末にある取得可能なパーツを探す
         check_detectable_parts(&parts_table);
         struct device_info_result device_result;
@@ -409,7 +414,10 @@ void set_device_data(struct window_data *win_data,enum device dev){
                 device_result = get_device_info(dev);
                 is_found = true;
         }
-        if(is_found == false)return;
+        if(is_found == false){
+                free(parts_table.found_dev_table);
+                return;
+        }
         win_data->dev = dev;
         switch(device_result.device_name){
                 case cpu:{

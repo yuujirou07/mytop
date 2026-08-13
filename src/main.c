@@ -72,7 +72,7 @@ static void make_cpu_window(){
 
         struct box empty_space = get_window_empty_space(NULL);
         if(empty_space.size.x < 1 || empty_space.size.y < 1){
-                end_render();
+                end_process();
                 exit(1);
         }
 
@@ -84,7 +84,7 @@ static void make_cpu_window(){
 
         struct window_data *cpu_info_win = create_window(NULL);
         if(cpu_info_win == NULL){
-                end_render();
+                end_process();
                 exit(1);
         }
         show_window_outline(cpu_info_win,true);
@@ -101,13 +101,13 @@ static void make_cpu_window(){
         get_window_size(cpu_info_win,&parent_size);
         struct box cpu_data_empty_space = get_window_empty_space(cpu_info_win);
         if(cpu_data_empty_space.size.x < 1 || cpu_data_empty_space.size.y < 1){
-                end_render();
+                end_process();
                 exit(1);
         }
 
         struct window_data *cpu_data_win = create_window(&cpu_info_win);
         if(cpu_data_win == NULL){
-                end_render();
+                end_process();
                 exit(1);
         }
         show_window_outline(cpu_data_win,true);
@@ -137,7 +137,7 @@ static void make_memory_window(){
 
         struct box empty_space = get_window_empty_space(NULL);
         if(empty_space.size.x < 1 || empty_space.size.y < 1){
-                end_render();
+                end_process();
                 exit(1);
         }
 
@@ -149,7 +149,7 @@ static void make_memory_window(){
 
         struct window_data *memory_window = create_window(NULL);
         if(memory_window == NULL){
-                end_render();
+                end_process();
                 exit(1);
         }
         show_window_outline(memory_window,true);
@@ -170,5 +170,6 @@ void end_process(){
         for(int i = winlist_num - 1;i >= 0;i--){
                 free_window(&winlist[i]);
         }
+        free_cpu_usage_data();
         end_render();
 }

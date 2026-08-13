@@ -129,6 +129,19 @@ void set_core_usage_rate(int core_id,int usage){
         core_palm_count[core_id]++;
 }
 
+void free_cpu_usage_data(void){
+        if(core_palm_data != NULL){
+                for(int i = 0;i < core_palm_num;i++){
+                        free(core_palm_data[i]);
+                }
+        }
+        free(core_palm_data);
+        free(core_palm_count);
+        core_palm_data = NULL;
+        core_palm_count = NULL;
+        core_palm_num = 0;
+}
+
 struct core_use_data get_core_usage_rate(int core_id){
         struct core_use_data result = {0};
 
