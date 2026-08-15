@@ -93,7 +93,7 @@ struct box get_window_empty_space(struct window_data *win_data);
 void set_device_data(struct window_data *win_data,enum device dev);
 void set_cpu_core_glaph(struct window_data *win_data,int core_id,
         struct vec2 glaph_start_pos);
-void set_cpu_total_use_glaph(struct window_data *win_data,int num_percet);
+void set_cpu_total_use_glaph(struct window_data *win_data);
 struct color_pair get_window_msg_color_pair(struct window_data *win_data,int msg_num);
 void set_memory_total(struct window_data *win_data,float memory_total);
 void set_memory_total_used_state(struct window_data *win_data,float used_data);

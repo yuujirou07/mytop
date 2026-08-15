@@ -6,23 +6,25 @@
 #include "process_info/process_info.h"
 
 const char *device_info_dir_names[device_count] = {
-        [cpu] = "cpuinfo",
+        [cpu_data] = "cpuinfo",
         [gpu] = NULL,
         [memory] = "meminfo",
 };
 
+// 指定デバイスに対応するprocfs情報を取得する。
+// 引数: devはcpu_dataまたはmemory。戻り値: 取得結果。未対応時はゼロ初期化値。
 struct device_info_result get_device_info(enum device dev){
         struct device_info_result dev_result = {0};
         const char *home_dir_path = "/proc/";
         switch(dev){
-                case cpu:{
+                case cpu_data:{
                         char cpu_path[512] = {0};
 
                         //パスの連結
                         snprintf(cpu_path,
                                 512,
                                 "%s%s",
-                                home_dir_path,device_info_dir_names[cpu]);
+                                home_dir_path,device_info_dir_names[cpu_data]);
 
                         get_cpu_info(&dev_result,cpu_path);
                         return dev_result;
@@ -42,7 +44,9 @@ struct device_info_result get_device_info(enum device dev){
 
 }
 
-//device_table->found_dev_tableはNULLにしておく
+// /procに情報ファイルが存在するデバイスを列挙する。
+// 引数: device_tableはfound_dev_tableをNULLにして渡す。戻り値: なし。
+// 成功時のfound_dev_tableは呼び出し側がfree()する。
 void check_detectable_parts(struct found_device_parts_table *device_table){
         if(device_table == NULL || device_table->found_dev_table != NULL)return;
         device_table->found_dev_count = 0;

@@ -18,6 +18,7 @@ static int color_pair_id(int bg_color,int fg_color);
 //描画まわりの入口
 //ncursesを立ち上げ、色が使える端末ならカラーペアも先に全部登録しておく
 //create_window()はstdscrを必要とするので、必ずこれより後に呼ぶ
+// 仕様: ncursesと配色を初期化する。引数: なし。戻り値: 完了時0。
 int init_render(){
         init_ncurses();
         if(has_colors()){
@@ -32,12 +33,14 @@ int init_render(){
       return 0;
 }
 
+// 仕様: 将来の描画反映処理用の予約関数。引数: なし。戻り値: 常に0。
 int render_push(){
         return 0;
 }
 
 //ncursesを終了して端末を元の状態へ戻す
 //stdscrはendwin()側の管理なのでこちらでは解放しない
+// 仕様: ncursesを終了する。引数: なし。戻り値: 完了時0。
 int end_render(){
         //stdscrはendwin()側の管理なのでdelwin()しない
         endwin();
@@ -50,6 +53,7 @@ int end_render(){
 //WINDOWの取得関数も初期化する
 //noecho()で打った文字が勝手に出るのを止め、cbreak()で
 //Enterを待たず1キーずつgetch()へ流れるようにする
+// 仕様: 端末を即時キー入力可能なncursesモードにする。引数・戻り値: なし。
 void init_ncurses(){
         setlocale(LC_ALL,"");
         WINDOW *win = initscr();
@@ -63,6 +67,7 @@ void init_ncurses(){
 
 //画面全体のWINDOW(stdscr)を保持して取り出せるようにする
 //win_setでセット、win_getで取得する
+// 仕様: ルートWINDOWを保存または取得する。引数: winとwin_set/win_get。戻り値: 対象WINDOW、失敗時NULL。
 WINDOW *win_ctrl(WINDOW *win,int flags){
 
         static WINDOW *static_win = NULL;
@@ -82,6 +87,7 @@ WINDOW *win_ctrl(WINDOW *win,int flags){
 //COLOR_DEFAULT(-1)も色の1つとして扱うため+1して0起点へ寄せる
 //ペア0はncursesが「既定色の組み合わせ」として予約していて
 //init_pair()で書き換えられないので、さらに+1して1から使う
+// 仕様: 背景色と文字色を一意なペアIDへ変換する。引数: 2色。戻り値: 1以上のID。
 int color_pair_id(int bg_color,int fg_color){
         return (bg_color + 1) * 9 + (fg_color + 1) + 1;
 }
@@ -90,6 +96,7 @@ int color_pair_id(int bg_color,int fg_color){
 //カラーペアとして登録しておく
 //9種なのは通常の8色にCOLOR_DEFAULT(端末の既定色)を足したぶん
 //idはcolor_pair_id()で決め打ちなので、後から(bg,fg)で引ける
+// 仕様: 利用可能な背景色と文字色の全組み合わせを登録する。引数・戻り値: なし。
 void set_color(){
         start_color(); // 色の準備
         //これを呼ぶと-1を「端末が元から使っている色」として指定できるようになる
@@ -109,6 +116,7 @@ void set_color(){
 //第二引数はcolor[0]が背景色color[1]が文字色
 //もし辞書内に同じpoair_idがあれば色データを上書きする仕様
 //col_pair_dic_getのときは*pair_idに見つかったidを書き戻す
+// 仕様: カラーペアを登録または検索する。引数: ID入出力先、背景色と文字色、操作種別。戻り値: 成功0、失敗-1。
 int color_pair_dic(int *pair_id,int color[2],int flags){
         if(pair_id == NULL)return -1;
 
@@ -161,6 +169,7 @@ int color_pair_dic(int *pair_id,int color[2],int flags){
 
 //枠線の色からカラーペアのidを引く
 //色が使えない端末や未登録の色のときは既定のペア(0)を返す
+// 仕様: 枠色に対応するncursesペアIDを取得する。引数: 枠色。戻り値: ペアID、未登録時0。
 int outline_color_pair(struct color_pair color){
         if(!has_colors())return 0;
 
@@ -174,6 +183,7 @@ int outline_color_pair(struct color_pair color){
 //画面全体(stdscr)の背景色をbkgd()で塗り替える
 //以降そこへ書かれる文字はこのカラーペアを引き継ぐ
 //bg_colorにCOLOR_DEFAULTを渡すと端末の背景をそのまま使う(透過が保たれる)
+// 仕様: ルートWINDOWの背景色を設定する。引数: 背景色。戻り値: なし。
 void set_background(int bg_color){
         if(!has_colors())return;
         //文字色は指定しないので端末の既定色に任せる
@@ -188,6 +198,7 @@ void set_background(int bg_color){
 //各WINDOWに描いた内容を実画面へ反映する
 //WINDOWはstdscrのサブウィンドウで文字バッファを共有しているので
 //stdscrごと転送すればまとめて出る
+// 仕様: WINDOW共有バッファを実画面へ反映する。引数: なし。戻り値: 成功0、未初期化時-1。
 int window_push_screen(){
         WINDOW *root_win = win_ctrl(NULL,win_get);
         if(root_win == NULL)return -1;
@@ -199,6 +210,7 @@ int window_push_screen(){
 
 //ウィンドウの中身(枠以外)を描く予定の場所
 //まだ何も持たせていないので空
+// 仕様: ウィンドウ内容描画用の予約関数。引数: 対象window_data。戻り値: なし。
 void render_window_obj(struct window_data *win_data){
         (void)win_data;
         return;
@@ -208,6 +220,7 @@ void render_window_obj(struct window_data *win_data){
 //ウィンドウ1枚分をWINDOWのバッファへ描き直す
 //werase()で一度消してから枠を引くだけなので、実画面へ出るのは
 //この後にwindow_push_screen()を呼んだとき
+// 仕様: 1ウィンドウを消去して枠・線・文字列を再描画する。引数: 対象。戻り値: 成功0、無効時-1。
 int render_window(struct window_data *win_data){
         WINDOW *win = get_window_handle(win_data);
         if(win == NULL)return -1;
@@ -225,6 +238,7 @@ int render_window(struct window_data *win_data){
 //親の辺が横線なら子の縦線がどちらへ伸びるかで上下のT字、
 //親の辺が縦線なら子の横線の向きで左右のT字になる
 //つなぐ相手がいない(joint_sideが-1)ときは角のまま返す
+// 仕様: 子の角と親の辺を接続する罫線文字を選ぶ。引数: 元の角と親の辺。戻り値: 接続後の文字。
 static chtype outline_joint_chr(chtype corner,int joint_side){
         if(joint_side < 0)return corner;
 
@@ -245,6 +259,7 @@ static chtype outline_joint_chr(chtype corner,int joint_side){
 
 //box()が置いた角1つを見て、親の枠と重なっていればT字へ書き換える
 //色はこの後のchgat()でまとめて乗るので、ここでは文字だけ差し替える
+// 仕様: 指定した子ウィンドウの角を必要ならT字へ置換する。引数: 対象、角座標、元の角。戻り値: なし。
 static void join_outline_corner(struct window_data *win_data,struct vec2 corner_pos,chtype corner){
         WINDOW *win = get_window_handle(win_data);
         if(win == NULL)return;
@@ -261,6 +276,7 @@ static void join_outline_corner(struct window_data *win_data,struct vec2 corner_
 //chgat()は属性を「置き換える」ので、box()が付けたA_ALTCHARSET
 //(罫線文字であるという印)を必ず渡し直す
 //これを落とすとlやqといった生の文字がそのまま表示される
+// 仕様: WINDOW外周へ枠と辺ごとの色を描く。引数: 対象window_data。戻り値: なし。
 void render_window_outline(struct window_data *win_data){
         WINDOW *win = get_window_handle(win_data);
         if(win == NULL)return;
@@ -302,6 +318,7 @@ void render_window_outline(struct window_data *win_data){
 }
 
 
+// 仕様: 登録文字列を色・属性付きで描画する。引数: 対象window_data。戻り値: なし。
 void render_msg_data(struct window_data *win_data){
         if(win_data == NULL)return;
         struct chr_data_arry chr_arry = get_window_msg_data(win_data);
@@ -320,6 +337,7 @@ void render_msg_data(struct window_data *win_data){
 }
 
 
+// 仕様: 文字列の幅と座標を枠内へ収める。引数: 対象window_data。戻り値: なし。
 void check_msg_data(struct window_data *win_data){
         WINDOW *win = get_window_handle(win_data);
         if(win == NULL)return;
@@ -365,6 +383,7 @@ void check_msg_data(struct window_data *win_data){
 }
 
 
+// 仕様: 登録済み水平線を描画する。引数: 対象window_data。戻り値: なし。一時配列は内部で解放する。
 void render_line(struct window_data *win_data){
         if(win_data == NULL)return;
         struct line_result line_data = get_line_data(win_data);

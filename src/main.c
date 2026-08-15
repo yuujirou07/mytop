@@ -13,6 +13,8 @@ static void make_cpu_window();
 static void make_memory_window();
 void end_process();
 
+// mytopを初期化して各ウィンドウを生成し、キー入力と1秒周期の再描画を処理する。
+// 引数: argv[1]が"mono"ならモノクロテーマを使用する。戻り値: 正常終了時は0。
 int main(int argc,char **argv){
         if(argc > 1 && strcmp(argv[1],"mono") == 0){
                 theme_set(mono);
@@ -65,6 +67,8 @@ int main(int argc,char **argv){
         return 0;
 }
 
+// CPU親ウィンドウとコア情報用の子ウィンドウを、画面の空き領域へ生成して初期描画する。
+// 引数・戻り値: なし。生成できない場合はend_process()後に終了する。
 static void make_cpu_window(){
         int x;
         int y;
@@ -125,11 +129,14 @@ static void make_cpu_window(){
         set_window_pos(cpu_data_win,
                 cpu_data_empty_space.pos.x + cpu_data_empty_space.size.x - size_w,
                 cpu_data_empty_space.pos.y);
-        set_device_data(cpu_data_win,cpu);
+        set_device_data(cpu_data_win,cpu_data);
+        set_device_data(cpu_info_win,cpu_info);
         render_window(cpu_info_win);
         render_window(cpu_data_win);
 }
 
+// メモリ情報ウィンドウを画面の空き領域へ生成し、取得したメモリ情報を初期描画する。
+// 引数・戻り値: なし。生成できない場合はend_process()後に終了する。
 static void make_memory_window(){
         int x;
         int y;
@@ -162,6 +169,8 @@ static void make_memory_window(){
         set_device_data(memory_window,memory);
         render_window(memory_window);
 }
+// 登録済みウィンドウとCPU使用率履歴を解放し、ncursesを終了する。
+// 引数・戻り値: なし。呼び出し後は既存window_dataを使用できない。
 void end_process(){
         struct window_data **winlist = NULL;
         int winlist_num = 0;

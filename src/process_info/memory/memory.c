@@ -5,6 +5,8 @@
 #include"process_info/process_info.h"
 
 
+// 指定したmeminfo形式のファイルを解析してメモリ情報を格納する。
+// 引数: dev_resultは出力先、pathは読み取るファイルパス。戻り値: なし。
 void get_memory_info(struct device_info_result *dev_result,const char *path){
         if(dev_result == NULL || path == NULL)return;
 
@@ -65,6 +67,8 @@ void get_memory_info(struct device_info_result *dev_result,const char *path){
         dev_result->device_data.mem_info = mem_info;
 }
 
+// メモリ総量を関数内に保存または取得する。
+// 引数: totalは入出力値、flagsはsetまたはget。戻り値: なし。
 void memory_size_ctl(float *total,int flags){
         if(total == NULL)return;
         static float static_total = 0;

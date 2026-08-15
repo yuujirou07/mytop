@@ -103,5 +103,5 @@ void theme_set(enum theme theme_rq);
 //現在のテーマを返す(初期値はdark)
 enum theme theme_get();
 void get_window_list(struct window_data ***win_list,int *win_num);
-
+int cpu_total_use_log(int *cpu_total,enum flags flags);
 #endif

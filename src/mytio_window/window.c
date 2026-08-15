@@ -16,6 +16,14 @@
 
 
 static void set_cpu_cores_info(struct window_data *win_data,struct cpu_info cpu_info,int cores_num);
+static void set_cpu_total_use_big_graph(struct window_data *win_data);
+static int cpu_use_dot_height(int percent,int dot_row_count);
+static int cpu_graph_newest_column(int max_sample_count);
+
+//点字1文字は横2列・縦4段の点でできている
+//U+2800に点のビットを足すと、その並びの点字になる
+#define braille_base_chr 0x2800
+#define braille_dot_rows 4
 
 //長方形(位置・サイズ)の管理はncursesのWINDOWに任せる
 //そのためwindow_data側では位置とサイズを持たない
@@ -38,6 +46,7 @@ static int windowlist_count = 0;
 //丸めた結果のboxをWINDOWへ反映する
 //必ず移動→リサイズの順に呼ぶ
 //先に広げると移動前の位置のまま親をはみ出してwresize()が失敗するため
+// 仕様: WINDOWを指定boxへ移動後リサイズする。引数: 対象と相対座標box。戻り値: 成功0、失敗-1。
 static int apply_window_box(struct window_data *win_data,struct box win_box){
         if(mvderwin(win_data->win,win_box.pos.y,win_box.pos.x) == ERR)return -1;
         if(wresize(win_data->win,win_box.size.y,win_box.size.x) == ERR)return -1;
@@ -45,6 +54,7 @@ static int apply_window_box(struct window_data *win_data,struct box win_box){
 }
 
 //今のWINDOWの位置と大きさをboxとして取り出す
+// 仕様: WINDOWの現在位置とサイズを取得する。引数: 対象。戻り値: 現在のbox。
 static struct box get_window_box(struct window_data *win_data){
         struct box win_box = {{0,0},{0,0}};
         get_window_pos(win_data,&win_box.pos);
@@ -57,6 +67,7 @@ static struct box get_window_box(struct window_data *win_data){
 //親を渡さなかった場合はstdscrの子になるので、init_render()より後に呼ぶこと
 //この時点ではサイズと位置が未定なので1x1で作り、後から
 //set_window_size()/set_window_pos()で伸ばす前提
+// 仕様: 1x1の子WINDOWと管理領域を生成して一覧へ登録する。引数: 親のアドレス、NULLならstdscr。戻り値: 所有ポインタ、失敗時NULL。
 struct window_data *create_window(struct window_data **parent_win){
         WINDOW *parent_win_handle = NULL;
 
@@ -116,6 +127,7 @@ struct window_data *create_window(struct window_data **parent_win){
 //サイズの実体はWINDOWが持つので、window_data側には控えを残さない
 //位置は今のものを据え置きで渡し、親付きなら親の内側に収まる値へ丸めてもらう
 //要求サイズが大きすぎると丸めの結果として位置も動くので、boxごと反映する
+// 仕様: WINDOWを親領域内に収めてリサイズする。引数: 対象、幅x、高さy。戻り値: 成功0、失敗-1。
 int set_window_size(struct window_data *win_data,int x,int y){
         if(win_data == NULL || win_data->win == NULL)return -1;
         if(x < 1 || y < 1)return -1;
@@ -137,6 +149,7 @@ int set_window_size(struct window_data *win_data,int x,int y){
 //サブウィンドウなのでmvderwin()、つまり指定するのは親から見た相対座標
 //大きさは今のものを据え置きで渡すため、親付きなら
 //その大きさを保ったまま収まる位置まで押し戻される
+// 仕様: WINDOWを親基準の座標へ移動する。引数: 対象、列x、行y。戻り値: 成功0、失敗-1。
 int set_window_pos(struct window_data *win_data,int x,int y){
         if(win_data == NULL || win_data->win == NULL)return -1;
         if(x < 0 || y < 0)return -1;
@@ -156,6 +169,7 @@ int set_window_pos(struct window_data *win_data,int x,int y){
 
 //枠線を出すかどうかのフラグを立てるだけ
 //実際に描くのはrender_window_outline()側
+// 仕様: 枠を表示するか設定する。引数: 対象と表示フラグ。戻り値: 成功0、対象がNULLなら-1。
 int show_window_outline(struct window_data *win_data,bool show_outline){
         if(win_data == NULL)return -1;
         win_data->outline.show_outline = show_outline;
@@ -166,6 +180,7 @@ int show_window_outline(struct window_data *win_data,bool show_outline){
 //定義したウィンドウの枠線の色をセットする
 //辺ごとに1回ずつ呼ぶ。持っておくだけで、色を実際に乗せるのは描画時
 //引数colorは文字色(COLOR_WHITEなど)で、背景色は触らない
+// 仕様: 指定した枠辺の文字色を設定する。引数: 対象、色、辺。戻り値: 成功0、対象がNULLなら-1。
 int set_window_outline_color(struct window_data *win_data,int color,enum line_side line_side){
         if(win_data == NULL)return -1;
         switch(line_side){
@@ -190,6 +205,7 @@ int set_window_outline_color(struct window_data *win_data,int color,enum line_si
 //生成したwindow_dataをstaticな配列でまとめて覚えておくための関数
 //windowlist_addで末尾に追加、windowlist_removeでWINDOWごと破棄する
 //removeでは削除位置より後ろをmemmove()で前へ詰めて穴を埋める
+// 仕様: window_dataを共有一覧へ追加または一覧から破棄する。引数: 対象のアドレスと操作種別。戻り値: 成功0、失敗-1。
 int window_list_ctrl(struct window_data **win_data,int flags){
         if(win_data == NULL || *win_data == NULL)return -1;
 
@@ -215,6 +231,7 @@ int window_list_ctrl(struct window_data **win_data,int flags){
 
 //WINDOWが持っているサイズをgetmaxyx()で取り出してvec2へ移す
 //getmaxyxは(行数,列数)の順なので、x=列数 y=行数へ入れ替えている
+// 仕様: WINDOWの幅と高さを出力する。引数: 対象と出力先。戻り値: なし。無効引数では変更しない。
 void get_window_size(struct window_data *win_data,struct vec2 *vec2){
         if(win_data == NULL || win_data->win == NULL || vec2 == NULL)return;
 
@@ -228,6 +245,7 @@ void get_window_size(struct window_data *win_data,struct vec2 *vec2){
 //WINDOWの位置を取り出す
 //set_window_pos()と揃えるため、画面の絶対座標ではなく
 //getparyx()で親から見た相対座標を返す
+// 仕様: 親基準のWINDOW座標を出力する。引数: 対象と出力先。戻り値: なし。無効引数では変更しない。
 void get_window_pos(struct window_data *win_data,struct vec2 *vec2){
         if(win_data == NULL || win_data->win == NULL || vec2 == NULL)return;
 
@@ -240,6 +258,7 @@ void get_window_pos(struct window_data *win_data,struct vec2 *vec2){
 
 //WINDOWの枠線は各辺1セル固定なので
 //枠を出す設定なら1、出さない設定なら0を返す
+// 仕様: 指定辺の枠が占めるセル数を返す。引数: 対象と辺。戻り値: 表示時1、非表示時0、無効時-1。
 int get_window_outline_size(struct window_data *win_data,enum line_side outline_side){
         if(win_data == NULL)return -1;
         if(!win_data->outline.show_outline)return 0;
@@ -256,6 +275,7 @@ int get_window_outline_size(struct window_data *win_data,enum line_side outline_
 
 //window_dataは不透明な型なので、中のWINDOWを取り出す口だけ用意する
 //描画側(mytop_render)がwaddch等を呼ぶために使う
+// 仕様: window_dataが所有するncurses WINDOWを参照する。引数: 対象。戻り値: 内部所有ポインタ、無効時NULL。
 WINDOW *get_window_handle(struct window_data *win_data){
         if(win_data == NULL)return stdscr;
         return win_data->win;
@@ -263,6 +283,7 @@ WINDOW *get_window_handle(struct window_data *win_data){
 
 //枠線の色を4辺まとめてコピーして返す
 //描画側から中身を直接書き換えられないよう、値渡しで取り出す
+// 仕様: 4辺の枠色をコピーする。引数: 対象と出力先。戻り値: なし。
 void get_window_outline_color(struct window_data *win_data,struct line_color *line_color){
         if(win_data == NULL || line_color == NULL)return;
         *line_color = win_data->outline.line_color;
@@ -273,6 +294,7 @@ void get_window_outline_color(struct window_data *win_data,struct line_color *li
 //corner_posは子ウィンドウから見たローカル座標(角の4点のどれか)
 //乗っている辺をenum line_sideで返し、どこにも乗っていなければ-1を返す
 //親の角(縦横2本が交わる点)と重なった場合はT字にすると親の角が壊れるので-1
+// 仕様: 子の角が重なる親枠の辺を調べる。引数: 子と子ローカル角座標。戻り値: enum line_side、接続なしは-1。
 int check_outline_joint(struct window_data *win_data,struct vec2 corner_pos){
         if(win_data == NULL)return -1;
 
@@ -312,6 +334,7 @@ int check_outline_joint(struct window_data *win_data,struct vec2 corner_pos){
 //この順にすると、位置が動くのは大きさを優先して確保できないときだけになる
 //子の座標は親から見た相対座標(mvderwin/getparyx)なので、
 //親自身が画面のどこにあるかは計算に関係しない
+// 仕様: 子boxを親WINDOW内へ丸める。引数: 親と要求box。戻り値: 補正後box。
 struct box check_child_win_data(struct window_data *parent_win,struct box child_box){
         struct box tmp_box = child_box;
 
@@ -339,6 +362,8 @@ struct box check_child_win_data(struct window_data *parent_win,struct box child_
         return tmp_box;
 }
 
+// 仕様: 描画文字列・座標・色・属性をWINDOWの描画待ち配列へコピーする。
+// 引数: 対象、NUL終端文字列、開始座標、色、属性。戻り値: なし。文字列の所有権は呼び出し側に残る。
 void set_chr(struct window_data *win_data,
         const wchar_t *msg,struct vec2 msg_start_pos,
         struct color_pair color,attr_t style){
@@ -372,6 +397,7 @@ void set_chr(struct window_data *win_data,
         win_data->chr_data.chr_data_count++;
 }
 
+// 仕様: WINDOWに登録された全描画文字列を解放して件数を0にする。引数: 対象。戻り値: なし。
 void clear_window_chr_data(struct window_data *win_data){
         if(win_data == NULL)return;
         for(int i = 0;i < win_data->chr_data.chr_data_count;i++){
@@ -381,10 +407,12 @@ void clear_window_chr_data(struct window_data *win_data){
         win_data->chr_data.chr_data_count = 0;
 }
 
+// 仕様: 登録文字列配列を参照用に返す。引数: 対象。戻り値: 内部配列と件数。要素を解放してはならない。
 struct chr_data_arry get_window_msg_data(struct window_data *win_data){
         return win_data->chr_data;
 }
 
+// 仕様: ncurses WINDOWの幅と高さをvec2へ出力する。引数: WINDOWと出力先。戻り値: なし。
 void get_vec2_maxyx(WINDOW *win,struct vec2 *pos){
         if(win == NULL || pos == NULL) return;
         struct vec2 tmp_pos = {0,0};
@@ -393,6 +421,7 @@ void get_vec2_maxyx(WINDOW *win,struct vec2 *pos){
 }
 
 
+// 仕様: 親window_dataを取得する。引数: 子。戻り値: 内部所有の親ポインタ、親なしまたは無効時NULL。
 struct window_data *get_parent_win(struct window_data *win_data){
         if(win_data == NULL)return NULL;
         return win_data->parent_window_data;
@@ -400,8 +429,12 @@ struct window_data *get_parent_win(struct window_data *win_data){
 
 
 
+// 仕様: 指定デバイスの情報を取得し、対象WINDOWへ対応する描画データを登録する。
+// 引数: 対象とcpu_info/cpu_data/memory。戻り値: なし。未検出時は描画を追加しない。
 void set_device_data(struct window_data *win_data,enum device dev){
         if(win_data == NULL)return;
+        enum device data_dev = dev;
+        if(dev == cpu_info)data_dev = cpu_data;
         struct found_device_parts_table parts_table = {0};
         //端末にある取得可能なパーツを探す
         check_detectable_parts(&parts_table);
@@ -410,8 +443,8 @@ void set_device_data(struct window_data *win_data,enum device dev){
         bool is_found = false;
         for(int i = 0; i < parts_table.found_dev_count;i++){
                 //もし探したパーツのテーブル内に第3引数と同じものがあればそのデータを取得する
-                if(parts_table.found_dev_table[i] != dev)continue;
-                device_result = get_device_info(dev);
+                if(parts_table.found_dev_table[i] != data_dev)continue;
+                device_result = get_device_info(data_dev);
                 is_found = true;
         }
         if(is_found == false){
@@ -419,8 +452,12 @@ void set_device_data(struct window_data *win_data,enum device dev){
                 return;
         }
         win_data->dev = dev;
-        switch(device_result.device_name){
-                case cpu:{
+        switch(dev){
+                case cpu_info:{
+                        set_cpu_total_use_big_graph(win_data);
+                        break;
+                }
+                case cpu_data:{
                         struct cpu_info cpu_info = device_result.device_data.cpu_info;
                         set_cpu_cores_info(win_data,cpu_info,atoi(cpu_info.cpu_cores));
                         break;
@@ -452,13 +489,15 @@ void set_device_data(struct window_data *win_data,enum device dev){
 }
 
 
+// 仕様: コア名・時系列グラフ・CPU全体バーを描画待ちデータへ登録する。
+// 引数: 対象、CPU情報、表示するコア数。戻り値: なし。
 void set_cpu_cores_info(struct window_data *win_data,struct cpu_info cpu_info,int cores_num){
         if(win_data == NULL)return;
 
         struct vec2 win_size = {0,0};
         get_window_size(win_data,&win_size);
 
-        set_cpu_total_use_glaph(win_data,20);
+        set_cpu_total_use_glaph(win_data);
         int core_pos_y = 2;
         int win_split_size = win_size.x/2;
         for(int i = 0; i < cores_num;i++){
@@ -491,6 +530,8 @@ void set_cpu_cores_info(struct window_data *win_data,struct cpu_info cpu_info,in
 }
 
 
+// 仕様: 指定コアの履歴を、右端が最新となるBraille時系列グラフとして登録する。
+// 引数: 対象、0起点コア番号、グラフ開始座標。戻り値: なし。
 void set_cpu_core_glaph(struct window_data *win_data,int core_id,struct vec2 glaph_start_pos){
         if(win_data == NULL)return;
         
@@ -503,29 +544,18 @@ void set_cpu_core_glaph(struct window_data *win_data,int core_id,struct vec2 gla
         int glaph_len = glaph_end_x - glaph_start_pos.x;
         if(glaph_len <= 0)return;
         struct core_use_data core_use_data = get_core_usage_rate(core_id);
-        int palm_num_len = 2;
         int tmp_palms = 0;
-        if(core_use_data.core_palm_data != NULL){
-                if(core_use_data.core_palm_data[core_use_data.core_palm_size -1] > 99)palm_num_len = 4;
-                else if(core_use_data.core_palm_data[core_use_data.core_palm_size - 1 ] > 10)palm_num_len = 3;
+        if(core_use_data.core_palm_data != NULL && core_use_data.core_palm_size > 0){
                 tmp_palms = core_use_data.core_palm_data[core_use_data.core_palm_size -1];
         }
-        wchar_t palams_num[palm_num_len+1];//'\0'用に＋1する
+        int palm_num_len = 4;
+        wchar_t palams_num[5] = {0};
         int joint_result = 
-                swprintf(palams_num,palm_num_len+1,
-                        L"%d%%",tmp_palms);
-        palams_num[joint_result] = '\0';
-        //0%でも一番下の2点は必ず出すので、まず白いベースラインを敷いてから
-        //値のある文字だけ後から色付きで上書きする
-        //まだ標本が1件も無いコアでもベースラインだけは引く
-        const wchar_t glaph_base_line = 0x2800 | 0x40 | 0x80;
+                swprintf(palams_num,5,L"%3d%%",tmp_palms);
+        if(joint_result < 0)return;
+        palams_num[joint_result] = L'\0';
         glaph_len -= palm_num_len;
-        wchar_t glaph_str[glaph_len + 1];
-        for(int i = 0;i < glaph_len;i++)glaph_str[i] = glaph_base_line;
-        glaph_str[glaph_len] = L'\0';
-        set_chr(win_data,glaph_str,glaph_start_pos,
-                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
-                A_NORMAL);
+        if(glaph_len <= 0)return;
 
         int palms_num_start_pos_x = 
                 (glaph_start_pos.x > win_size.x/2)?
@@ -537,18 +567,30 @@ void set_cpu_core_glaph(struct window_data *win_data,int core_id,struct vec2 gla
                 (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
                 A_NORMAL);
 
-        if(core_use_data.core_palm_data == NULL || core_use_data.core_palm_size <= 0)return;
+        int max_sample_count = glaph_len * 2;
+        int newest_sample = -1;
+        if(core_use_data.core_palm_data != NULL && core_use_data.core_palm_size > 0){
+                newest_sample = core_use_data.core_palm_size - 1;
+        }
+        //最新の値を置く点の列。ここより左は古い値、右は空きになる
+        int newest_column = cpu_graph_newest_column(max_sample_count);
 
-        //一番後ろ(最新)から2件ずつ読み、左端の文字から右へ古い順に並べる
-        //1文字の中も左列が新しい方、右列がその1つ前になる
-        int glaph_id = 0;
-        for(int i = core_use_data.core_palm_size - 1;
-                i >= 0 && glaph_id < glaph_len;i -= 2){
-                int left_percent = core_use_data.core_palm_data[i];
-                int right_percent = i - 1 >= 0 ?
-                        core_use_data.core_palm_data[i - 1] : 0;
-                //一番下の段はベースラインなので値に関係なく常に点灯させる
-                wchar_t glaph_chr = glaph_base_line;
+        for(int glaph_id = 0;glaph_id < glaph_len;glaph_id++){
+                int left_column = glaph_id * 2;
+                int right_column = left_column + 1;
+                int left_percent = 0;
+                int right_percent = 0;
+                //最新の列からの距離が、そのまま何件ぶん古いかになる
+                int left_sample = newest_sample - (newest_column - left_column);
+                int right_sample = newest_sample - (newest_column - right_column);
+                if(left_column <= newest_column && left_sample >= 0){
+                        left_percent = core_use_data.core_palm_data[left_sample];
+                }
+                if(right_column <= newest_column && right_sample >= 0){
+                        right_percent = core_use_data.core_palm_data[right_sample];
+                }
+
+                wchar_t glaph_chr = 0x2800 | 0x40 | 0x80;
 
                 if(left_percent > 25)glaph_chr |= 0x04;
                 if(left_percent > 50)glaph_chr |= 0x02;
@@ -572,43 +614,72 @@ void set_cpu_core_glaph(struct window_data *win_data,int core_id,struct vec2 gla
                         glaph_start_pos.y};
                 set_chr(win_data,glaph_cell,cell_pos,
                         (struct color_pair){COLOR_DEFAULT,glaph_color},A_NORMAL);
-                glaph_id++;
         }
 }
 
 
 
-void set_cpu_total_use_glaph(struct window_data *win_data,int percent){
+// 仕様: CPU全体の実測使用率をメモリグラフと同じ形式の横棒として登録する。引数: 対象。戻り値: なし。
+void set_cpu_total_use_glaph(struct window_data *win_data){
         if(win_data == NULL)return;
 
-        if(percent > 100)percent = 100;
-        else if(percent < 0) percent = 0;
-
+        int percent = get_cpu_total_usage_rate();
         struct vec2 win_size = {0,0};
         get_window_size(win_data,&win_size);
 
         const wchar_t *top_msg = L"CPU";
-        struct vec2 top_msg_st_pos = {0,1};
+        struct vec2 top_msg_st_pos = {1,1};
         size_t top_msg_len = wcslen(top_msg);
         set_chr(win_data,top_msg,
                 top_msg_st_pos,
                 (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
                 A_BOLD);
 
-        struct vec2 total_cpu_use_glaph_area_start_pos;
-        total_cpu_use_glaph_area_start_pos.x = top_msg_st_pos.x + top_msg_len+3;
-        total_cpu_use_glaph_area_start_pos.y = 1;
+        wchar_t buff[16] = {0};
+        int str_size = swprintf(buff,16,L"%d%%",percent);
+        if(str_size < 0)return;
 
-        int glaph_str_max_size = win_size.x - total_cpu_use_glaph_area_start_pos.x ;
-        int now_uage = glaph_str_max_size * percent/100;
-        wchar_t glaph_str[now_uage+1];
-        for(int i = 0;i < now_uage;i++)glaph_str[i] = get_font(cpu_bar_graph);
-        glaph_str[now_uage] = L'\0';
+        int graph_st_pos = top_msg_st_pos.x + top_msg_len + 1;
+        int graph_line_size = win_size.x - graph_st_pos - str_size - 4;
+        if(graph_line_size <= 0)return;
+        int graph_end_pos = graph_st_pos + graph_line_size + 1;
+        int usage_str_pos = graph_end_pos + 2;
+        int graph_used_size = graph_line_size * percent/100;
 
-        set_chr(win_data,glaph_str,total_cpu_use_glaph_area_start_pos,
+        int color = COLOR_GREEN;
+        if(percent > 50)color = COLOR_YELLOW;
+        if(percent > 90)color = COLOR_RED;
+
+        wchar_t graph_used_space_buff[graph_used_size + 1];
+        for(int i = 0;i < graph_used_size;i++){
+                graph_used_space_buff[i] = L'|';
+        }
+        graph_used_space_buff[graph_used_size] = L'\0';
+
+        wchar_t graph_unused_space_buff[graph_line_size - graph_used_size + 1];
+        for(int i = 0;i < graph_line_size - graph_used_size;i++){
+                graph_unused_space_buff[i] = L'|';
+        }
+        graph_unused_space_buff[graph_line_size - graph_used_size] = L'\0';
+
+        wchar_t graph_st_chr[2] = {L'[',L'\0'};
+        wchar_t graph_end_chr[2] = {L']',L'\0'};
+
+        set_chr(win_data,graph_used_space_buff,
+                (struct vec2){graph_st_pos + 1,1},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+        set_chr(win_data,graph_unused_space_buff,
+                (struct vec2){graph_st_pos + 1 + graph_used_size,1},
+                (struct color_pair){COLOR_DEFAULT,COLOR_BLACK},A_NORMAL);
+        set_chr(win_data,buff,(struct vec2){usage_str_pos,1},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+        set_chr(win_data,graph_st_chr,(struct vec2){graph_st_pos,1},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
+        set_chr(win_data,graph_end_chr,(struct vec2){graph_end_pos,1},
                 (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
 }
 
+// 仕様: 登録文字列の色を取得する。引数: 対象と0起点の登録番号。戻り値: 色、無効対象時は既定色。
 struct color_pair get_window_msg_color_pair(struct window_data *win_data,int msg_num){
         //取り出せなかったときは端末の既定色を返す
         //ここで0(COLOR_BLACK)を返すと透過端末で背景が黒く塗られる
@@ -620,11 +691,13 @@ struct color_pair get_window_msg_color_pair(struct window_data *win_data,int msg
 }
 
 
+// 仕様: CPUグラフ領域検査用の予約関数。引数: 対象。戻り値: 現在は常に0。
 int check_cpu_usage_glaph_area(struct window_data *win_data){
         return 0;
 }
 
 
+// 仕様: 2つのWINDOW矩形が重なるか判定する。引数: 比較対象2つ。戻り値: 重なる場合true。
 bool check_box_overlay(struct window_data *win1,struct window_data *win2){
         if(win1 == NULL || win2 == NULL){
                 return 0;
@@ -652,6 +725,8 @@ bool check_box_overlay(struct window_data *win1,struct window_data *win2){
         return x_overlap && y_overlap;
 }
 
+// 仕様: 対象領域内で直接の子と重ならない最大矩形を求める。
+// 引数: 親window_data、NULLならstdscr。戻り値: 最大空きbox、失敗時はゼロサイズ。
 struct box get_window_empty_space(struct window_data *win_data){
         struct box empty_space = {{0,0},{0,0}};
         WINDOW *win = get_window_handle(win_data);
@@ -732,6 +807,7 @@ struct box get_window_empty_space(struct window_data *win_data){
         return empty_space;
 }
 
+// 仕様: メモリ総量を保存し、GiB表示を登録する。引数: 対象と総量。戻り値: なし。
 void set_memory_total(struct window_data *win_data,float memory_total){
         if(win_data == NULL)return;
 
@@ -755,6 +831,7 @@ void set_memory_total(struct window_data *win_data,float memory_total){
                 A_BOLD);
 }
 
+// 仕様: 使用中メモリ量の文字表示を登録する。引数: 対象と使用量。戻り値: なし。
 void set_memory_total_used_state(struct window_data *win_data,float used_data){
         if(win_data == NULL)return;
 
@@ -779,6 +856,7 @@ void set_memory_total_used_state(struct window_data *win_data,float used_data){
                 mem_used_str_st_pos.y);
 }
 
+// 仕様: 水平線を登録し、同じ行なら色を更新する。引数: 対象、色、行番号。戻り値: 成功0、失敗-1。
 int set_line(struct window_data *win_data,struct color_pair color_pair,int line){
         if(win_data == NULL)return 0;
         for(int i = 0;i < win_data->line_count;i++){
@@ -796,6 +874,7 @@ int set_line(struct window_data *win_data,struct color_pair color_pair,int line)
         return win_data->line_count;
 }
 
+// 仕様: 水平線配列の初期容量を確保する。引数: 対象。戻り値: なし。既に確保済みなら何もしない。
 void line_memory_allocate(struct window_data *win_data){
         if(win_data == NULL)return;
         int new_capacity = win_data->line_capacity == 0 ? 4 : win_data->line_capacity * 2;
@@ -806,6 +885,7 @@ void line_memory_allocate(struct window_data *win_data){
         win_data->line_capacity = new_capacity;
 }
 
+// 仕様: 水平線データのコピーを返す。引数: 対象。戻り値: 呼び出し側がfree()する配列と件数。
 struct line_result get_line_data(struct window_data *win_data){
         if(win_data == NULL)return (struct line_result){NULL,0};
         struct line_result tmp_line;
@@ -817,6 +897,7 @@ struct line_result get_line_data(struct window_data *win_data){
         struct line_result tmp_line_result = {tmp_line.line_data,line_num};
         return tmp_line_result;
 }
+// 仕様: 登録WINDOW一覧を参照用に返す。引数: 一覧と件数の出力先。戻り値: なし。配列をfree()してはならない。
 void get_window_list(struct window_data ***win_list,int *win_num){
         if(win_list == NULL || win_num == NULL)return;
         *win_list = winlist;
@@ -824,6 +905,7 @@ void get_window_list(struct window_data ***win_list,int *win_num){
 }
 
 
+// 仕様: 指定WINDOWを一覧から外して関連メモリを解放する。引数: 所有ポインタのアドレス。戻り値: 成功0、失敗-1。
 int free_window(struct window_data **win_data){
         if(win_data == NULL || *win_data == NULL)return -1;
 
@@ -834,6 +916,7 @@ int free_window(struct window_data **win_data){
 
         return window_list_ctrl(win_data,windowlist_remove);
 }
+// 仕様: 使用中メモリの割合グラフを登録する。引数: 対象と使用量。戻り値: なし。
 void set_memory_total_used_state_graph(struct window_data *win_data,float used_data){
         if(win_data == NULL)return;
 
@@ -907,6 +990,7 @@ void set_memory_total_used_state_graph(struct window_data *win_data,float used_d
 
 
 
+// 仕様: キャッシュ済みメモリ量の文字表示を登録する。引数: 対象と量。戻り値: なし。
 void set_memory_cached_state(struct window_data *win_data,float cached_data){
         if(win_data == NULL)return;
 
@@ -932,6 +1016,7 @@ void set_memory_cached_state(struct window_data *win_data,float cached_data){
                 cached_str_st_pos.y);
 }
 
+// 仕様: キャッシュ済みメモリの割合グラフを登録する。引数: 対象と量。戻り値: なし。
 void set_memory_cached_state_graph(struct window_data *win_data,float cached_data){
         if(win_data == NULL)return;
 
@@ -988,6 +1073,7 @@ void set_memory_cached_state_graph(struct window_data *win_data,float cached_dat
                 (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
 }
 
+// 仕様: 空きメモリ量の文字表示を登録する。引数: 対象と量。戻り値: なし。
 void set_memory_free_state(struct window_data *win_data,float free_data){
         if(win_data == NULL)return;
 
@@ -1013,6 +1099,7 @@ void set_memory_free_state(struct window_data *win_data,float free_data){
                 free_str_st_pos.y);
 }
 
+// 仕様: 空きメモリの割合グラフを登録する。引数: 対象と量。戻り値: なし。
 void set_memory_free_state_graph(struct window_data *win_data,float free_data){
         if(win_data == NULL)return;
 
@@ -1069,7 +1156,131 @@ void set_memory_free_state_graph(struct window_data *win_data,float free_data){
                 (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
 }
 
+// 仕様: WINDOWに設定された再描画対象デバイスを参照する。引数: 対象。戻り値: 内部enumへのポインタ、未設定時NULL。
 enum device *get_window_draw_dev(struct window_data *win_data){
         if(win_data == NULL || win_data->dev == device_count )return NULL;
         return &win_data->dev;
+}
+
+
+// 仕様: CPU全体の使用率履歴を、コアグラフと同じ点字の時系列グラフとして登録する。
+// 引数: 対象。戻り値: なし。右端が最新で、1文字が横2件・縦4段ぶんを表す。
+static void set_cpu_total_use_big_graph(struct window_data *win_data){
+        if(win_data == NULL)return;
+        int cpu_total_use = get_cpu_total_usage_rate();
+        cpu_total_use_log(&cpu_total_use,set);
+
+        int cpu_total_use_log_arry[126] = {0};
+        int cpu_total_use_log_num =
+                cpu_total_use_log(cpu_total_use_log_arry,get);
+        if(cpu_total_use_log_num <= 0)return;
+
+        struct box graph_space = get_window_empty_space(win_data);
+        int graph_left = graph_space.pos.x + get_window_outline_size(win_data,left);
+        int graph_top = graph_space.pos.y + get_window_outline_size(win_data,top);
+        int graph_width = graph_space.size.x -
+                get_window_outline_size(win_data,left) -
+                get_window_outline_size(win_data,right);
+        int graph_height = graph_space.size.y -
+                get_window_outline_size(win_data,top) -
+                get_window_outline_size(win_data,bottom);
+        if(graph_width <= 0 || graph_height <= 0)return;
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+        int graph_zero_y = win_size.y/2;
+        if(graph_zero_y < graph_top)graph_zero_y = graph_top;
+        if(graph_zero_y >= graph_top + graph_height){
+                graph_zero_y = graph_top + graph_height - 1;
+        }
+        int graph_max_height = graph_zero_y - graph_top;
+
+        int graph_row_count = graph_max_height + 1;
+        int dot_row_count = graph_row_count * braille_dot_rows;
+
+        //1文字で2件ぶんを表すので、同じ幅でも棒グラフの倍の期間が入る
+        int max_sample_count = graph_width * 2;
+        int newest_sample = cpu_total_use_log_num - 1;
+        //最新の値を置く点の列。ここより左は古い値、右は空きになる
+        int newest_column = cpu_graph_newest_column(max_sample_count);
+
+        //1文字ぶんの点を下から上へ並べたもの
+        //左列は点7・3・2・1、右列は点8・6・5・4に当たる
+        static const wchar_t left_dot_bit[braille_dot_rows] = {0x40,0x04,0x02,0x01};
+        static const wchar_t right_dot_bit[braille_dot_rows] = {0x80,0x20,0x10,0x08};
+
+        for(int glaph_id = 0;glaph_id < graph_width;glaph_id++){
+                int left_column = glaph_id * 2;
+                int right_column = left_column + 1;
+                int left_percent = 0;
+                int right_percent = 0;
+                int left_dot_height = 0;
+                int right_dot_height = 0;
+                //最新の列からの距離が、そのまま何件ぶん古いかになる
+                int left_sample = newest_sample - (newest_column - left_column);
+                int right_sample = newest_sample - (newest_column - right_column);
+                if(left_column <= newest_column && left_sample >= 0){
+                        left_percent = cpu_total_use_log_arry[left_sample];
+                        left_dot_height = cpu_use_dot_height(left_percent,dot_row_count);
+                }
+                if(right_column <= newest_column && right_sample >= 0){
+                        right_percent = cpu_total_use_log_arry[right_sample];
+                        right_dot_height = cpu_use_dot_height(right_percent,dot_row_count);
+                }
+                if(left_dot_height == 0 && right_dot_height == 0)continue;
+
+                //2列のうち高い方の値で1文字ぶんの色を決める
+                int color_percent = left_percent > right_percent ?
+                        left_percent : right_percent;
+                int color = COLOR_GREEN;
+                if(color_percent > 50)color = COLOR_YELLOW;
+                if(color_percent > 90)color = COLOR_RED;
+
+                for(int row = 0;row < graph_row_count;row++){
+                        wchar_t glaph_chr = braille_base_chr;
+                        //この行が受け持つのは、下から数えてdot_row_base段目からの4段
+                        int dot_row_base = row * braille_dot_rows;
+                        for(int dot = 0;dot < braille_dot_rows;dot++){
+                                if(dot_row_base + dot < left_dot_height){
+                                        glaph_chr |= left_dot_bit[dot];
+                                }
+                                if(dot_row_base + dot < right_dot_height){
+                                        glaph_chr |= right_dot_bit[dot];
+                                }
+                        }
+                        //点が1つも無ければ、これより上の行も空になる
+                        if(glaph_chr == braille_base_chr)break;
+
+                        wchar_t glaph_cell[2] = {glaph_chr,L'\0'};
+                        set_chr(win_data,glaph_cell,
+                                (struct vec2){graph_left + glaph_id,
+                                        graph_zero_y - row},
+                                (struct color_pair){COLOR_DEFAULT,color},A_NORMAL);
+                }
+        }
+}
+
+// 仕様: 最新の値を入れる点の列(0起点、右端がmax_sample_count-1)を返す。
+// 引数: グラフ全体に入る件数。戻り値: 0以上max_sample_count-1以下の列番号。
+// 点字1文字は2件ぶんなので、左右どちらの点列に入るかを採取回数で固定する。
+// 1件進むたびに入れ替えると同じ値でも組み合わせが変わり、
+// 1文字ぶんで決めている色が、グラフが動くたびに変わってしまう。
+// そのぶんグラフは2件ごとに1文字ずつ左へ動く。
+static int cpu_graph_newest_column(int max_sample_count){
+        int newest_column = max_sample_count - 1;
+        if((newest_column % 2) != (int)(get_cpu_sample_count() % 2))newest_column--;
+        if(newest_column < 0)newest_column = 0;
+        return newest_column;
+}
+
+// 仕様: 使用率を、下から数えた点字の点の段数へ直す。
+// 引数: 0〜100の使用率と、グラフ全体の段数。戻り値: 1以上dot_row_count以下の段数。
+// 0%でも1段だけ点けて、コアグラフと同じく底辺を残す。
+static int cpu_use_dot_height(int percent,int dot_row_count){
+        if(percent < 0)percent = 0;
+        else if(percent > 100)percent = 100;
+
+        int dot_height = percent * dot_row_count / 100;
+        if(dot_height < 1)dot_height = 1;
+        return dot_height;
 }

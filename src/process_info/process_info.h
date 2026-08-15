@@ -6,7 +6,8 @@
 
 
 enum device{
-        cpu,
+        cpu_info,
+        cpu_data,
         gpu,
         memory,
         device_count,
