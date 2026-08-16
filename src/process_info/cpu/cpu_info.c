@@ -38,10 +38,8 @@ void get_cpu_info(struct device_info_result *dev_result,const char *path){
         struct cpu_info cpu_info = {0};
         char file_line_buff[512] = {0};
 
-        int cpu_info_member_count = 0;
         while(fgets(file_line_buff,sizeof(file_line_buff),file) != NULL){
-                if(file_line_buff[0] == '\n' || file_line_buff[0] == '\r' || 
-                        cpu_info_member_count > cpu_info_member_size)break;
+                if(file_line_buff[0] == '\n' || file_line_buff[0] == '\r')break;
 
                 char *value = strchr(file_line_buff,':');
                 if(value == NULL)continue;
@@ -61,45 +59,44 @@ void get_cpu_info(struct device_info_result *dev_result,const char *path){
                         cpu_info.processor = atoi(value);
                 }
                 else if(strcmp(file_line_buff,"cpu family") == 0){
-                        snprintf(cpu_info.cpu_family,sizeof(cpu_info.cpu_family),"%s",value);
+                        cpu_info.cpu_family = atoi(value);
                 }
                 else if(strcmp(file_line_buff,"model") == 0){
-                        snprintf(cpu_info.model,sizeof(cpu_info.model),"%s",value);
+                        cpu_info.model = atoi(value);
                 }
                 else if(strcmp(file_line_buff,"model name") == 0){
                         snprintf(cpu_info.model_name,sizeof(cpu_info.model_name),"%s",value);
                 }
                 else if(strcmp(file_line_buff,"cpu MHz") == 0){
-                        snprintf(cpu_info.cpu_MHz,sizeof(cpu_info.cpu_MHz),"%s",value);
+                        cpu_info.cpu_MHz = strtod(value,NULL);
                 }
                 else if(strcmp(file_line_buff,"cache size") == 0){
-                        snprintf(cpu_info.cache_size,sizeof(cpu_info.cache_size),"%s",value);
+                        cpu_info.cache_size = strtoul(value,NULL,10);
                 }
                 else if(strcmp(file_line_buff,"physical id") == 0){
-                        snprintf(cpu_info.physical_id,sizeof(cpu_info.physical_id),"%s",value);
+                        cpu_info.physical_id = atoi(value);
                 }
                 else if(strcmp(file_line_buff,"siblings") == 0){
-                        snprintf(cpu_info.siblings,sizeof(cpu_info.siblings),"%s",value);
+                        cpu_info.siblings = atoi(value);
                 }
                 else if(strcmp(file_line_buff,"core id") == 0){
-                        snprintf(cpu_info.core_id,sizeof(cpu_info.core_id),"%s",value);
+                        cpu_info.core_id = atoi(value);
                 }
                 else if(strcmp(file_line_buff,"cpu cores") == 0){
-                        snprintf(cpu_info.cpu_cores,sizeof(cpu_info.cpu_cores),"%s",value);
+                        cpu_info.cpu_cores = atoi(value);
                 }
                 else if(strcmp(file_line_buff,"fpu") == 0){
-                        snprintf(cpu_info.fpu,sizeof(cpu_info.fpu),"%s",value);
+                        cpu_info.fpu = strcmp(value,"yes") == 0;
                 }
                 else if(strcmp(file_line_buff,"wp") == 0){
-                        snprintf(cpu_info.wp,sizeof(cpu_info.wp),"%s",value);
+                        cpu_info.wp = strcmp(value,"yes") == 0;
                 }
-                cpu_info_member_count++;
         }
 
         fclose(file);
-        int cpu_core = atoi(cpu_info.siblings);
-        if(atoi(cpu_info.cpu_cores) > 0){
-                cpu_info.thread = cpu_core / atoi(cpu_info.cpu_cores);
+        int cpu_core = cpu_info.siblings;
+        if(cpu_info.cpu_cores > 0){
+                cpu_info.thread = cpu_core / cpu_info.cpu_cores;
         }
 
         cpu_core_info(&cpu_core,core_set);
@@ -336,7 +333,7 @@ static int cpu_core_info(int *num,int flags){
 
 int cpu_total_use_log(int *cpu_total,enum flags flags){
         if(cpu_total == NULL)return -1;
-        static int static_cpu_total_use_log[126] = {0};
+        static int static_cpu_total_use_log[cpu_total_use_log_max] = {0};
         static int static_cpu_total_use_count = 0;
         int static_cpu_total_use_max =
                 sizeof(static_cpu_total_use_log)/sizeof(static_cpu_total_use_log[0]);

@@ -61,6 +61,7 @@ void init_ncurses(){
         noecho();
         curs_set(0);
         cbreak();
+        keypad(win,true);
         refresh();
         return;
 }

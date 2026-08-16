@@ -9,10 +9,12 @@ const char *device_info_dir_names[device_count] = {
         [cpu_data] = "cpuinfo",
         [gpu] = NULL,
         [memory] = "meminfo",
+        [process] = "self",
 };
 
 // 指定デバイスに対応するprocfs情報を取得する。
-// 引数: devはcpu_dataまたはmemory。戻り値: 取得結果。未対応時はゼロ初期化値。
+// 引数: devはcpu_data、memory、process。戻り値: 取得結果。未対応時はゼロ初期化値。
+// processで返すprocess_info配列は呼び出し側がfree()する。
 struct device_info_result get_device_info(enum device dev){
         struct device_info_result dev_result = {0};
         const char *home_dir_path = "/proc/";
@@ -36,6 +38,50 @@ struct device_info_result get_device_info(enum device dev){
                                 home_dir_path,device_info_dir_names[memory]);
                         mem_path[joint_result] = '\0';
                         get_memory_info(&dev_result,mem_path);
+                        return dev_result;
+                }
+                case process:{
+                        DIR *process_dir = opendir(home_dir_path);
+                        if(process_dir == NULL)return dev_result;
+
+                        struct process_list process_list = {0};
+                        int allocated_num = 0;
+                        struct dirent *dir_data = NULL;
+                        while((dir_data = readdir(process_dir)) != NULL){
+                                size_t dir_name_len = strlen(dir_data->d_name);
+                                if(dir_name_len == 0 ||
+                                   strspn(dir_data->d_name,"0123456789") != dir_name_len)continue;
+
+                                char process_path[512] = {0};
+                                int path_len = snprintf(process_path,sizeof(process_path),
+                                        "%s%s/status",home_dir_path,dir_data->d_name);
+                                if(path_len < 0 || path_len >= (int)sizeof(process_path))continue;
+
+                                struct process_info process_info = {0};
+                                get_process_info(&process_info,process_path);
+                                if(process_info.pid <= 0)continue;
+
+                                if(process_list.process_num >= allocated_num){
+                                        int new_allocated_num = allocated_num == 0 ? 64 : allocated_num * 2;
+                                        struct process_info *tmp_process_info =
+                                                realloc(process_list.process_info,
+                                                        sizeof(*tmp_process_info) * new_allocated_num);
+                                        if(tmp_process_info == NULL)break;
+                                        process_list.process_info = tmp_process_info;
+                                        allocated_num = new_allocated_num;
+                                }
+                                process_list.process_info[process_list.process_num] =
+                                        process_info;
+                                process_list.process_num++;
+                        }
+                        closedir(process_dir);
+
+                        if(process_list.process_num == 0){
+                                free(process_list.process_info);
+                                return dev_result;
+                        }
+                        dev_result.device_name = process;
+                        dev_result.device_data.process_list = process_list;
                         return dev_result;
                 }
                 default:

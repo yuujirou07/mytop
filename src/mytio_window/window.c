@@ -1,4 +1,3 @@
-#include <math.h>
 #include <stddef.h>
 #include<stdio.h>
 #include<stdlib.h>
@@ -11,6 +10,7 @@
 #include "cpu_info.h"
 #include "memory.h"
 #include"mytop_render.h"
+#include "process.h"
 #include "process_info/process_info.h"
 #include "theme.h"
 
@@ -38,6 +38,8 @@ struct window_data{
         int line_capacity;
         struct window_data *parent_window_data;
         enum device dev;
+        int process_scroll;
+        int process_max_scroll;
 };
 
 static struct window_data *winlist[winlist_max] = {0};
@@ -459,16 +461,16 @@ void set_device_data(struct window_data *win_data,enum device dev){
                 }
                 case cpu_data:{
                         struct cpu_info cpu_info = device_result.device_data.cpu_info;
-                        set_cpu_cores_info(win_data,cpu_info,atoi(cpu_info.cpu_cores));
+                        set_cpu_cores_info(win_data,cpu_info,cpu_info.cpu_cores);
                         break;
                 }
                 case memory:{
                         struct mem_info mem_info = device_result.device_data.mem_info;
                 
-                        float mem_total= atof(mem_info.mem_total)/pow(10,6);
-                        float mem_available = atof(mem_info.mem_available)/pow(10,6);
-                        float mem_cached = atof(mem_info.cached)/pow(10,6);
-                        float mem_free = atof(mem_info.mem_free)/pow(10,6);
+                        float mem_total = mem_info.mem_total / 1000000.0f;
+                        float mem_available = mem_info.mem_available / 1000000.0f;
+                        float mem_cached = mem_info.cached / 1000000.0f;
+                        float mem_free = mem_info.mem_free / 1000000.0f;
                         float mem_used = mem_total - mem_available;
                         set_memory_total(win_data,mem_total);
                         set_memory_total_used_state(win_data,mem_used);
@@ -477,9 +479,52 @@ void set_device_data(struct window_data *win_data,enum device dev){
                         set_memory_cached_state_graph(win_data,mem_cached);
                         set_memory_free_state(win_data,mem_free);
                         set_memory_free_state_graph(win_data,mem_free);
-                        
+                        break;
+                }
+                case process:{
+                        struct process_list process_list =
+                                device_result.device_data.process_list;
+                        struct vec2 win_size = {0};
+                        get_window_size(win_data,&win_size);
 
+                        int pid_column_width = check_max_pid_digit(process_list);
+                        if(pid_column_width < 3)pid_column_width = 3;
+                        set_chr(win_data,
+                                L"PID",
+                                (struct vec2){(pid_column_width - 3) / 2 + 1,1},
+                                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                                A_NORMAL);
+                        int name_column_x = pid_column_width + 2;
+                        set_chr(win_data,
+                                L"NAME",
+                                (struct vec2){name_column_x,1},
+                                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                                A_NORMAL);
 
+                        int process_num = process_list.process_num;
+                        int visible_process_num = win_size.y - 3;
+                        if(visible_process_num < 0)visible_process_num = 0;
+                        win_data->process_max_scroll = process_num - visible_process_num;
+                        if(win_data->process_max_scroll < 0)win_data->process_max_scroll = 0;
+                        if(win_data->process_scroll > win_data->process_max_scroll){
+                                win_data->process_scroll = win_data->process_max_scroll;
+                        }
+
+                        int draw_process_num = process_num - win_data->process_scroll;
+                        if(draw_process_num > visible_process_num){
+                                draw_process_num = visible_process_num;
+                        }
+                        for(int i = 0;i < draw_process_num;i++){
+                                int process_id = win_data->process_scroll + i;
+                                set_process_pid(win_data,
+                                        &process_list.process_info[process_id],
+                                        pid_column_width,i + 2);
+                                set_process_name(win_data,
+                                        &process_list.process_info[process_id],
+                                        name_column_x,i + 2);
+                        }
+                        free(process_list.process_info);
+                        break;
                 }
                 
                 default:
@@ -916,6 +961,8 @@ int free_window(struct window_data **win_data){
 
         return window_list_ctrl(win_data,windowlist_remove);
 }
+
+
 // 仕様: 使用中メモリの割合グラフを登録する。引数: 対象と使用量。戻り値: なし。
 void set_memory_total_used_state_graph(struct window_data *win_data,float used_data){
         if(win_data == NULL)return;
@@ -1162,6 +1209,17 @@ enum device *get_window_draw_dev(struct window_data *win_data){
         return &win_data->dev;
 }
 
+void scroll_process(struct window_data *win_data,int amount){
+        if(win_data == NULL || win_data->dev != process)return;
+
+        int next_scroll = win_data->process_scroll + amount;
+        if(next_scroll < 0)next_scroll = 0;
+        else if(next_scroll > win_data->process_max_scroll){
+                next_scroll = win_data->process_max_scroll;
+        }
+        win_data->process_scroll = next_scroll;
+}
+
 
 // 仕様: CPU全体の使用率履歴を、コアグラフと同じ点字の時系列グラフとして登録する。
 // 引数: 対象。戻り値: なし。右端が最新で、1文字が横2件・縦4段ぶんを表す。
@@ -1170,7 +1228,7 @@ static void set_cpu_total_use_big_graph(struct window_data *win_data){
         int cpu_total_use = get_cpu_total_usage_rate();
         cpu_total_use_log(&cpu_total_use,set);
 
-        int cpu_total_use_log_arry[126] = {0};
+        int cpu_total_use_log_arry[cpu_total_use_log_max] = {0};
         int cpu_total_use_log_num =
                 cpu_total_use_log(cpu_total_use_log_arry,get);
         if(cpu_total_use_log_num <= 0)return;
@@ -1201,8 +1259,7 @@ static void set_cpu_total_use_big_graph(struct window_data *win_data){
         //1文字で2件ぶんを表すので、同じ幅でも棒グラフの倍の期間が入る
         int max_sample_count = graph_width * 2;
         int newest_sample = cpu_total_use_log_num - 1;
-        //最新の値を置く点の列。ここより左は古い値、右は空きになる
-        int newest_column = cpu_graph_newest_column(max_sample_count);
+        int newest_column = max_sample_count - 1;
 
         //1文字ぶんの点を下から上へ並べたもの
         //左列は点7・3・2・1、右列は点8・6・5・4に当たる
@@ -1283,4 +1340,49 @@ static int cpu_use_dot_height(int percent,int dot_row_count){
         int dot_height = percent * dot_row_count / 100;
         if(dot_height < 1)dot_height = 1;
         return dot_height;
+}
+
+void set_process_pid(struct window_data *win_data,
+        const struct process_info *process_info,int digit,int line){
+        if(win_data == NULL || process_info == NULL || digit <= 0)return;
+
+        wchar_t pid[digit + 1];
+        if(swprintf(pid,digit + 1,L"%*d",digit,process_info->pid) < 0)return;
+
+        set_chr(win_data,
+                pid,
+                (struct vec2){1,line},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                A_NORMAL);
+}
+
+void set_process_name(struct window_data *win_data,
+        const struct process_info *process_info,int column,int line){
+        if(win_data == NULL || process_info == NULL)return;
+
+        struct vec2 win_size = {0};
+        get_window_size(win_data,&win_size);
+        int name_max_len = win_size.x - column -
+                get_window_outline_size(win_data,right);
+        if(name_max_len <= 0)return;
+        if(name_max_len >= process_name_size){
+                name_max_len = process_name_size - 1;
+        }
+
+        wchar_t name[process_name_size] = {0};
+        size_t name_len = mbstowcs(name,process_info->name,process_name_size - 1);
+        if(name_len == (size_t)-1)return;
+        if(name_len > (size_t)name_max_len)name_len = name_max_len;
+        name[name_len] = L'\0';
+
+        set_chr(win_data,
+                name,
+                (struct vec2){column,line},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                A_NORMAL);
+}
+
+
+void get_visible_process_area(){
+
 }

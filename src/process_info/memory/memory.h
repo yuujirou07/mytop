@@ -1,21 +1,19 @@
 #ifndef MEMORY_H
 #define MEMORY_H
 
-#define mem_info_value_size 256
-
-
-
+#include<stdint.h>
+//各値の単位は/proc/meminfoと同じkB。
 struct mem_info{
-        char mem_total[mem_info_value_size];
-        char mem_free[mem_info_value_size];
-        char mem_available[mem_info_value_size];
-        char buffers[mem_info_value_size];
-        char cached[mem_info_value_size];
-        char swap_cached[mem_info_value_size];
-        char active[mem_info_value_size];
-        char inactive[mem_info_value_size];
-        char swap_total[mem_info_value_size];
-        char swap_free[mem_info_value_size];
+        uint64_t mem_total;
+        uint64_t mem_free;
+        uint64_t mem_available;
+        uint64_t buffers;
+        uint64_t cached;
+        uint64_t swap_cached;
+        uint64_t active;
+        uint64_t inactive;
+        uint64_t swap_total;
+        uint64_t swap_free;
 };
 
 void memory_size_ctl(float *total,int flags);

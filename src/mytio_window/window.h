@@ -107,4 +107,9 @@ void set_memory_cached_state_graph(struct window_data *win_data,float cached_dat
 void set_memory_free_state(struct window_data *win_data,float free_data);
 void set_memory_free_state_graph(struct window_data *win_data,float free_data);
 enum device *get_window_draw_dev(struct window_data *win_data);
+void scroll_process(struct window_data *win_data,int amount);
+void set_process_pid(struct window_data *win_data,
+        const struct process_info *process_info,int digit,int line);
+void set_process_name(struct window_data *win_data,
+        const struct process_info *process_info,int column,int line);
 #endif

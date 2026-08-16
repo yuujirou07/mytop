@@ -1,5 +1,6 @@
 #include "memory.h"
 #include<stdio.h>
+#include<stdlib.h>
 #include<string.h>
 #include"core.h"
 #include"process_info/process_info.h"
@@ -31,34 +32,34 @@ void get_memory_info(struct device_info_result *dev_result,const char *path){
                 value[strcspn(value,"\r\n")] = '\0';
 
                 if(strcmp(str_line_buff,"MemTotal") == 0){
-                        snprintf(mem_info.mem_total,sizeof(mem_info.mem_total),"%s",value);
+                        mem_info.mem_total = strtoull(value,NULL,10);
                 }
                 else if(strcmp(str_line_buff,"MemFree") == 0){
-                        snprintf(mem_info.mem_free,sizeof(mem_info.mem_free),"%s",value);
+                        mem_info.mem_free = strtoull(value,NULL,10);
                 }
                 else if(strcmp(str_line_buff,"MemAvailable") == 0){
-                        snprintf(mem_info.mem_available,sizeof(mem_info.mem_available),"%s",value);
+                        mem_info.mem_available = strtoull(value,NULL,10);
                 }
                 else if(strcmp(str_line_buff,"Buffers") == 0){
-                        snprintf(mem_info.buffers,sizeof(mem_info.buffers),"%s",value);
+                        mem_info.buffers = strtoull(value,NULL,10);
                 }
                 else if(strcmp(str_line_buff,"Cached") == 0){
-                        snprintf(mem_info.cached,sizeof(mem_info.cached),"%s",value);
+                        mem_info.cached = strtoull(value,NULL,10);
                 }
                 else if(strcmp(str_line_buff,"SwapCached") == 0){
-                        snprintf(mem_info.swap_cached,sizeof(mem_info.swap_cached),"%s",value);
+                        mem_info.swap_cached = strtoull(value,NULL,10);
                 }
                 else if(strcmp(str_line_buff,"Active") == 0){
-                        snprintf(mem_info.active,sizeof(mem_info.active),"%s",value);
+                        mem_info.active = strtoull(value,NULL,10);
                 }
                 else if(strcmp(str_line_buff,"Inactive") == 0){
-                        snprintf(mem_info.inactive,sizeof(mem_info.inactive),"%s",value);
+                        mem_info.inactive = strtoull(value,NULL,10);
                 }
                 else if(strcmp(str_line_buff,"SwapTotal") == 0){
-                        snprintf(mem_info.swap_total,sizeof(mem_info.swap_total),"%s",value);
+                        mem_info.swap_total = strtoull(value,NULL,10);
                 }
                 else if(strcmp(str_line_buff,"SwapFree") == 0){
-                        snprintf(mem_info.swap_free,sizeof(mem_info.swap_free),"%s",value);
+                        mem_info.swap_free = strtoull(value,NULL,10);
                 }
         }
 

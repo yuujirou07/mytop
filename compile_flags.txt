@@ -6,3 +6,4 @@
 -I/home/yuujirou07/vscode_proj/mytop/src
 -I/home/yuujirou07/vscode_proj/mytop/src/process_info/cpu
 -I/home/yuujirou07/vscode_proj/mytop/src/process_info/memory
+-I/home/yuujirou07/vscode_proj/mytop/src/process_info/process/

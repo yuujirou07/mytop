@@ -12,6 +12,7 @@
 static void make_cpu_window();
 static void make_memory_window();
 void end_process();
+static void make_process_window();
 
 // mytopを初期化して各ウィンドウを生成し、キー入力と1秒周期の再描画を処理する。
 // 引数: argv[1]が"mono"ならモノクロテーマを使用する。戻り値: 正常終了時は0。
@@ -23,6 +24,7 @@ int main(int argc,char **argv){
         init_render();
         make_cpu_window();
         make_memory_window();
+        make_process_window();
         //端末の背景をそのまま使う
         //COLOR_BLACKを指定すると、背景を透過させている端末で黒く塗り潰される
         set_background(COLOR_DEFAULT);
@@ -37,6 +39,25 @@ int main(int argc,char **argv){
                 }
                 else if(ch == KEY_RESIZE){
                         
+                }
+                else if(ch == KEY_UP || ch == 'k' ||
+                        ch == KEY_DOWN || ch == 'j'){
+                        struct window_data **win_list = NULL;
+                        int win_num = 0;
+                        get_window_list(&win_list,&win_num);
+
+                        for(int i = 0;i < win_num;i++){
+                                enum device *dev = get_window_draw_dev(win_list[i]);
+                                if(dev == NULL || *dev != process)continue;
+
+                                int scroll_amount =
+                                        ch == KEY_UP || ch == 'k' ? -1 : 1;
+                                scroll_process(win_list[i],scroll_amount);
+                                clear_window_chr_data(win_list[i]);
+                                set_device_data(win_list[i],*dev);
+                                render_window(win_list[i]);
+                        }
+                        window_push_screen();
                 }
 
                 struct timespec now;
@@ -181,4 +202,33 @@ void end_process(){
         }
         free_cpu_usage_data();
         end_render();
+}
+
+static void make_process_window(){
+        int x;
+        int y;
+        getmaxyx(stdscr,y,x);
+
+        struct box empty_space = get_window_empty_space(NULL);
+        if(empty_space.size.x < 1 || empty_space.size.y < 1){
+                end_process();
+                exit(1);
+        }
+
+        struct window_data *proc_win = create_window(NULL);
+
+        show_window_outline(proc_win,true);
+
+        for(int i = 0;i < 4;i++){
+                set_window_outline_color(proc_win,COLOR_WHITE,i);
+        }
+
+        set_window_size(proc_win,empty_space.size.x/2,(y*2)/3);
+        set_window_pos(proc_win,empty_space.size.x/2,y/3);
+        set_device_data(proc_win,process);
+        render_window(proc_win);
+
+
+
+
 }
