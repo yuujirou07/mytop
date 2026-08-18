@@ -10,6 +10,7 @@
 #include"mytop_render.h"
 
 static void make_cpu_window();
+static void make_strage_window();
 static void make_memory_window();
 void end_process();
 static void make_process_window();
@@ -25,6 +26,7 @@ int main(int argc,char **argv){
         make_cpu_window();
         make_memory_window();
         make_process_window();
+        make_strage_window();
         //端末の背景をそのまま使う
         //COLOR_BLACKを指定すると、背景を透過させている端末で黒く塗り潰される
         set_background(COLOR_DEFAULT);
@@ -223,12 +225,31 @@ static void make_process_window(){
                 set_window_outline_color(proc_win,COLOR_WHITE,i);
         }
 
-        set_window_size(proc_win,empty_space.size.x/2,(y*2)/3);
+        set_window_size(proc_win,(empty_space.size.x/2)+1,((y*2)/3)+1);
         set_window_pos(proc_win,empty_space.size.x/2,y/3);
         set_device_data(proc_win,process);
         render_window(proc_win);
 
+}
 
+static void make_strage_window(){
+        int x;
+        int y;
+        getmaxyx(stdscr,y,x);
 
+        struct box empty_space = get_window_empty_space(NULL);
+        if(empty_space.size.x < 1 || empty_space.size.y < 1){
+                end_process();
+                exit(1);
+        }
+        struct window_data *strage_win = create_window(NULL);
+        show_window_outline(strage_win,true);
+        for(int i = 0;i < 4;i++){
+                set_window_outline_color(strage_win,COLOR_WHITE,i);
+        }
 
+        set_window_pos(strage_win,empty_space.pos.x,empty_space.pos.y);
+        set_window_size(strage_win,empty_space.size.x,empty_space.size.y);
+        set_device_data(strage_win,strage);
+        render_window(strage_win);
 }

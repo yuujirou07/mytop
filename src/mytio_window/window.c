@@ -9,6 +9,7 @@
 #include"window.h"
 #include "cpu_info.h"
 #include "memory.h"
+#include "strage.h"
 #include"mytop_render.h"
 #include "process.h"
 #include "process_info/process_info.h"
@@ -526,7 +527,20 @@ void set_device_data(struct window_data *win_data,enum device dev){
                         free(process_list.process_info);
                         break;
                 }
-                
+                case strage:{
+                        struct strage_info strage_info = device_result.device_data.strage_info;
+
+                        float strage_total = strage_info.strage_total / 1000000.0f;
+                        float strage_used = strage_info.strage_used / 1000000.0f;
+                        float strage_free = strage_info.strage_free / 1000000.0f;
+                        set_strage_total(win_data,strage_total);
+                        set_strage_used_state(win_data,strage_used);
+                        set_strage_used_state_graph(win_data,strage_used);
+                        set_strage_free_state(win_data,strage_free);
+                        set_strage_free_state_graph(win_data,strage_free);
+                        break;
+                }
+
                 default:
                         break;
         }
@@ -1200,6 +1214,199 @@ void set_memory_free_state_graph(struct window_data *win_data,float free_data){
         set_chr(win_data,graph_st_chr,(struct vec2){1,7},
                 (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
         set_chr(win_data,graph_end_chr,(struct vec2){graph_end_pos,7},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
+}
+
+// 仕様: ストレージ総量を保存し、GiB表示を登録する。引数: 対象と総量。戻り値: なし。
+void set_strage_total(struct window_data *win_data,float strage_total){
+        if(win_data == NULL)return;
+
+        strage_size_ctl(&strage_total,set);
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+        wchar_t total[32];
+
+        int joint_result =
+                swprintf(total,32,L"TOTAL: %.1f GiB",strage_total);
+
+        if(joint_result < 0 || joint_result > win_size.x)return;
+        int strage_total_str_st_pos = (win_size.x - joint_result)/2;
+        struct vec2 strage_total_st_pos = {strage_total_str_st_pos,1};
+
+        set_chr(win_data,
+                total,
+                strage_total_st_pos,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                A_BOLD);
+}
+
+// 仕様: 使用中ストレージ量の文字表示を登録する。引数: 対象と使用量。戻り値: なし。
+void set_strage_used_state(struct window_data *win_data,float used_data){
+        if(win_data == NULL)return;
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+        wchar_t str[32];
+
+        int joint_result =
+                swprintf(str,32,L"Used: %0.1f GiB",used_data);
+
+        if(joint_result < 0)return;
+        int strage_used_str_st_pos_x = (win_size.x - joint_result)/2;
+        struct vec2 strage_used_str_st_pos = {strage_used_str_st_pos_x,2};
+
+        set_chr(win_data,
+                str,
+                strage_used_str_st_pos,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                A_NORMAL);
+
+        set_line(win_data,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                strage_used_str_st_pos.y);
+}
+
+// 仕様: 使用中ストレージの割合グラフを登録する。引数: 対象と使用量。戻り値: なし。
+void set_strage_used_state_graph(struct window_data *win_data,float used_data){
+        if(win_data == NULL)return;
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+
+        //ウィンドウサイズがグラフを描く５行未満だと関数を終わる
+        if(win_size.y < 5)return;
+
+        wchar_t buff[32] = {0};
+        float strage_total = 0;
+        strage_size_ctl(&strage_total,get);
+        if(strage_total <= 0)return;
+        float strage_ratio = used_data/strage_total * 100;
+
+        int color = COLOR_GREEN;
+        if(strage_ratio > 50)color = COLOR_YELLOW;
+        if(strage_ratio > 90)color = COLOR_RED;
+
+        int str_size =
+                swprintf(buff,32,L"%.2fG/%.2fG %.2f%%",
+                        used_data,strage_total,strage_ratio);
+        int graph_line_size = win_size.x -5 - str_size;
+        if(graph_line_size <= 0)return;
+        int graph_end_pos = 2 + graph_line_size;
+        int usage_str_pos = graph_end_pos + 2;
+
+        int strage_graph_memory = graph_line_size * used_data/strage_total;
+        if(strage_graph_memory < 0)strage_graph_memory = 0;
+        if(strage_graph_memory > graph_line_size)strage_graph_memory = graph_line_size;
+
+        wchar_t graph_used_space_buff[strage_graph_memory + 1];
+        for(int i = 0;i < strage_graph_memory;i++){
+                graph_used_space_buff[i] = L'|';
+        }
+        graph_used_space_buff[strage_graph_memory] = L'\0';
+
+        wchar_t graph_unused_space_buff[graph_line_size + 1];
+        for(int i = 0;i < graph_line_size - strage_graph_memory;i++){
+                graph_unused_space_buff[i] = L'|';
+        }
+        graph_unused_space_buff[graph_line_size - strage_graph_memory] = L'\0';
+
+        wchar_t graph_st_chr[2] = {L'[',L'\0'};
+        wchar_t graph_end_chr[2] = {L']',L'\0'};
+
+        set_chr(win_data,graph_used_space_buff,(struct vec2){2,3},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+        set_chr(win_data,graph_unused_space_buff,(struct vec2){2 + strage_graph_memory,3},
+                (struct color_pair){COLOR_DEFAULT,COLOR_BLACK},A_NORMAL);
+        set_chr(win_data,buff,(struct vec2){usage_str_pos,3},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+        set_chr(win_data,graph_st_chr,(struct vec2){1,3},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
+        set_chr(win_data,graph_end_chr,(struct vec2){graph_end_pos,3},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
+}
+
+// 仕様: 空きストレージ量の文字表示を登録する。引数: 対象と量。戻り値: なし。
+void set_strage_free_state(struct window_data *win_data,float free_data){
+        if(win_data == NULL)return;
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+        if(win_size.y < 6)return;
+        wchar_t str[32];
+
+        int joint_result =
+                swprintf(str,32,L"Free: %.1f GiB",free_data);
+
+        if(joint_result < 0)return;
+        int strage_free_str_st_pos_x = (win_size.x - joint_result)/2;
+        struct vec2 strage_free_str_st_pos = {strage_free_str_st_pos_x,4};
+
+        set_chr(win_data,
+                str,
+                strage_free_str_st_pos,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                A_NORMAL);
+
+        set_line(win_data,
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},
+                strage_free_str_st_pos.y);
+}
+
+// 仕様: 空きストレージの割合グラフを登録する。引数: 対象と量。戻り値: なし。
+void set_strage_free_state_graph(struct window_data *win_data,float free_data){
+        if(win_data == NULL)return;
+
+        struct vec2 win_size = {0,0};
+        get_window_size(win_data,&win_size);
+        if(win_size.y < 7)return;
+
+        wchar_t buff[32] = {0};
+        float strage_total = 0;
+        strage_size_ctl(&strage_total,get);
+        if(strage_total <= 0)return;
+        float strage_ratio = free_data/strage_total * 100;
+
+        int color = COLOR_GREEN;
+        if(strage_ratio < 60)color = COLOR_YELLOW;
+        if(strage_ratio < 30)color = COLOR_RED;
+
+        int str_size =
+                swprintf(buff,32,L"%.2fG/%.2fG %.2f%%",
+                        free_data,strage_total,strage_ratio);
+        int graph_line_size = win_size.x -5 - str_size;
+        if(graph_line_size <= 0)return;
+        int graph_end_pos = 2 + graph_line_size;
+        int usage_str_pos = graph_end_pos + 2;
+
+        int strage_graph_memory = graph_line_size * free_data/strage_total;
+        if(strage_graph_memory < 0)strage_graph_memory = 0;
+        if(strage_graph_memory > graph_line_size)strage_graph_memory = graph_line_size;
+
+        wchar_t graph_free_space_buff[strage_graph_memory + 1];
+        for(int i = 0;i < strage_graph_memory;i++){
+                graph_free_space_buff[i] = L'|';
+        }
+        graph_free_space_buff[strage_graph_memory] = L'\0';
+
+        wchar_t graph_used_space_buff[graph_line_size + 1];
+        for(int i = 0;i < graph_line_size - strage_graph_memory;i++){
+                graph_used_space_buff[i] = L'|';
+        }
+        graph_used_space_buff[graph_line_size - strage_graph_memory] = L'\0';
+
+        wchar_t graph_st_chr[2] = {L'[',L'\0'};
+        wchar_t graph_end_chr[2] = {L']',L'\0'};
+
+        set_chr(win_data,graph_free_space_buff,(struct vec2){2,5},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+        set_chr(win_data,graph_used_space_buff,(struct vec2){2 + strage_graph_memory,5},
+                (struct color_pair){COLOR_DEFAULT,COLOR_BLACK},A_NORMAL);
+        set_chr(win_data,buff,(struct vec2){usage_str_pos,5},
+                (struct color_pair){COLOR_DEFAULT,color},A_BOLD);
+        set_chr(win_data,graph_st_chr,(struct vec2){1,5},
+                (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
+        set_chr(win_data,graph_end_chr,(struct vec2){graph_end_pos,5},
                 (struct color_pair){COLOR_DEFAULT,COLOR_WHITE},A_BOLD);
 }
 

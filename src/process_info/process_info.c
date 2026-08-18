@@ -9,6 +9,7 @@ const char *device_info_dir_names[device_count] = {
         [cpu_data] = "cpuinfo",
         [gpu] = NULL,
         [memory] = "meminfo",
+        [strage] = "mounts",
         [process] = "self",
 };
 
@@ -38,6 +39,10 @@ struct device_info_result get_device_info(enum device dev){
                                 home_dir_path,device_info_dir_names[memory]);
                         mem_path[joint_result] = '\0';
                         get_memory_info(&dev_result,mem_path);
+                        return dev_result;
+                }
+                case strage:{
+                        get_strage_info(&dev_result,"/");
                         return dev_result;
                 }
                 case process:{

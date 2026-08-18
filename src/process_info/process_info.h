@@ -2,6 +2,7 @@
 #define PROCESS_INFO_H
 #include"cpu/cpu_info.h"
 #include"memory.h"
+#include"strage.h"
 #include"process_info/process/process.h"
 
 
@@ -11,6 +12,7 @@ enum device{
         cpu_data,
         gpu,
         memory,
+        strage,
         process,
         device_count,
 };
@@ -26,6 +28,7 @@ struct device_info_result{
         union {
                 struct cpu_info cpu_info;
                 struct mem_info mem_info;
+                struct strage_info strage_info;
                 struct process_list process_list;
         }device_data;
 };

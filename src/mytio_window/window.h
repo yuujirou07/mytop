@@ -106,6 +106,11 @@ void set_memory_cached_state(struct window_data *win_data,float cached_data);
 void set_memory_cached_state_graph(struct window_data *win_data,float cached_data);
 void set_memory_free_state(struct window_data *win_data,float free_data);
 void set_memory_free_state_graph(struct window_data *win_data,float free_data);
+void set_strage_total(struct window_data *win_data,float strage_total);
+void set_strage_used_state(struct window_data *win_data,float used_data);
+void set_strage_used_state_graph(struct window_data *win_data,float used_data);
+void set_strage_free_state(struct window_data *win_data,float free_data);
+void set_strage_free_state_graph(struct window_data *win_data,float free_data);
 enum device *get_window_draw_dev(struct window_data *win_data);
 void scroll_process(struct window_data *win_data,int amount);
 void set_process_pid(struct window_data *win_data,
